@@ -1,12 +1,13 @@
 #include <behaviors.dtsi>
 #include <dt-bindings/zmk/keys.h>
+#include "keys_tr.h"
 
 / {
     keymap {
         compatible = "zmk,keymap";
 
         // =============================================================
-        // BASE LAYER - TÜRKÇE Q
+        // TÜRKÇE Q BASE LAYER
         // =============================================================
 
         base_layer {
@@ -20,22 +21,22 @@
 
                 &kp ESC
 
-                &kp N1
-                &kp N2
-                &kp N3
-                &kp N4
-                &kp N5
-                &kp N6
-                &kp N7
-                &kp N8
-                &kp N9
-                &kp N0
+                &kp TR_N1
+                &kp TR_N2
+                &kp TR_N3
+                &kp TR_N4
+                &kp TR_N5
+                &kp TR_N6
+                &kp TR_N7
+                &kp TR_N8
+                &kp TR_N9
+                &kp TR_N0
 
-                // Fiziksel * ? tuşu
-                &kp EQUAL
+                // * ?
+                &kp TR_ASTERISK
 
-                // Fiziksel - _ tuşu
-                &kp MINUS
+                // - _
+                &kp TR_MINUS
 
                 &kp BSPC
 
@@ -47,25 +48,28 @@
 
                 &kp TAB
 
-                &kp Q
-                &kp W
-                &kp E
-                &kp R
-                &kp T
-                &kp Y
-                &kp U
-                &kp I
-                &kp O
-                &kp P
+                &kp TR_Q
+                &kp TR_W
+                &kp TR_E
+                &kp TR_R
+                &kp TR_T
+                &kp TR_Y
+                &kp TR_U
 
-                // Ğ / ğ
-                &kp LBKT
+                // ı
+                &kp TR_I_DOTLESS
 
-                // Ü / ü
-                &kp RBKT
+                &kp TR_O
+                &kp TR_P
 
-                // , / ;
-                &kp BSLH
+                // Ğ
+                &kp TR_E_BREVE
+
+                // Ü
+                &kp TR_U_UMLAUT
+
+                // ,
+                &kp TR_COMMA
 
 
                 // =====================================================
@@ -75,21 +79,21 @@
 
                 &kp CAPSLOCK
 
-                &kp A
-                &kp S
-                &kp D
-                &kp F
-                &kp G
-                &kp H
-                &kp J
-                &kp K
-                &kp L
+                &kp TR_A
+                &kp TR_S
+                &kp TR_D
+                &kp TR_F
+                &kp TR_G
+                &kp TR_H
+                &kp TR_J
+                &kp TR_K
+                &kp TR_L
 
-                // Ş / ş
-                &kp SEMICOLON
+                // Ş
+                &kp TR_S_CEDILLA
 
-                // İ / i
-                &kp SQT
+                // İ
+                &kp TR_I_DOT
 
                 &kp ENTER
 
@@ -101,22 +105,22 @@
 
                 &kp LSHIFT
 
-                &kp Z
-                &kp X
-                &kp C
-                &kp V
-                &kp B
-                &kp N
-                &kp M
+                &kp TR_Z
+                &kp TR_X
+                &kp TR_C
+                &kp TR_V
+                &kp TR_B
+                &kp TR_N
+                &kp TR_M
 
-                // Ö / ö
-                &kp COMMA
+                // Ö
+                &kp TR_O_UMLAUT
 
-                // Ç / ç
-                &kp PERIOD
+                // Ç
+                &kp TR_C_CEDILLA
 
-                // . / :
-                &kp FSLH
+                // .
+                &kp TR_PERIOD
 
                 &kp RSHIFT
 
