@@ -43,7 +43,7 @@
                 &kp P
                 &kp LBKT
                 &kp RBKT
-                &kp BSLH
+                &kp COMMA
 
                 // R2
                 &kp CAPSLOCK
@@ -69,9 +69,9 @@
                 &kp B
                 &kp N
                 &kp M
-                &kp COMMA
-                &kp PERIOD
                 &kp FSLH
+                &kp BSLH
+                &kp PERIOD
                 &kp RSHIFT
                 &kp UP
                 &kp DEL
