@@ -5,13 +5,17 @@
     keymap {
         compatible = "zmk,keymap";
 
+        // =============================================================
+        // BASE LAYER - TÜRKÇE Q
+        // =============================================================
+
         base_layer {
             display-name = "Türkçe Q";
 
             bindings = <
                 // =====================================================
                 // R0
-                // ESC  1 2 3 4 5 6 7 8 9 0  *  -  BACKSPACE
+                // ESC 1 2 3 4 5 6 7 8 9 0 * - BACKSPACE
                 // =====================================================
 
                 &kp ESC
@@ -27,7 +31,10 @@
                 &kp N9
                 &kp N0
 
+                // Fiziksel * ? tuşu
                 &kp EQUAL
+
+                // Fiziksel - _ tuşu
                 &kp MINUS
 
                 &kp BSPC
@@ -51,14 +58,14 @@
                 &kp O
                 &kp P
 
-                // Ğ
+                // Ğ / ğ
                 &kp LBKT
 
-                // Ü
+                // Ü / ü
                 &kp RBKT
 
-                // ,
-                &kp COMMA
+                // , / ;
+                &kp BSLH
 
 
                 // =====================================================
@@ -78,10 +85,10 @@
                 &kp K
                 &kp L
 
-                // Ş
+                // Ş / ş
                 &kp SEMICOLON
 
-                // İ
+                // İ / i
                 &kp SQT
 
                 &kp ENTER
@@ -102,14 +109,14 @@
                 &kp N
                 &kp M
 
-                // Ö
-                &kp FSLH
+                // Ö / ö
+                &kp COMMA
 
-                // Ç
-                &kp BSLH
-
-                // .
+                // Ç / ç
                 &kp PERIOD
+
+                // . / :
+                &kp FSLH
 
                 &kp RSHIFT
 
