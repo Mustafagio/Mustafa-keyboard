@@ -4,26 +4,33 @@
 #include <zephyr/devicetree.h>
 
 /*
- * P0.15 onboard LED
+ * ZMK v0.3 nice!nano onboard LED
  *
- * Devicetree:
- * startup_led: startup_led {
- *     gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+ * nice_nano.dtsi:
+ *
+ * blue_led: led_0 {
+ *     gpios = <&gpio0 15 GPIO_ACTIVE_HIGH>;
  * };
+ *
+ * Yani:
+ * P0.15
+ * HIGH = LED ON
+ * LOW  = LED OFF
  */
 
 static const struct gpio_dt_spec startup_led =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(startup_led), gpios);
+    GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
 
 /*
- * LED'i kapatmak için kullanılacak delayed work.
+ * 2 saniye sonunda LED'i kapatmak için
+ * kullanılacak delayed work.
  */
 static struct k_work_delayable startup_led_off_work;
 
 
 /*
- * 2 saniye sonunda LED'i kapat.
+ * 2 saniye sonra çalışır ve LED'i kapatır.
  */
 static void startup_led_off(struct k_work *work)
 {
@@ -34,25 +41,22 @@ static void startup_led_off(struct k_work *work)
 
 
 /*
- * Açılışta LED'i yak.
- *
- * LED:
- *   logical 1 = ON
- *   logical 0 = OFF
- *
- * Active LOW olduğu için gpio_pin_set_dt()
- * fiziksel seviyeyi otomatik olarak tersliyor.
+ * Sistem başlarken çalışır.
  */
 static int startup_led_init(void)
 {
     int ret;
 
+    /*
+     * LED GPIO'sunun hazır olup olmadığını kontrol et.
+     */
     if (!gpio_is_ready_dt(&startup_led)) {
         return -ENODEV;
     }
 
     /*
-     * LED başlangıçta kapalı.
+     * P0.15'i çıkış olarak ayarla.
+     * Başlangıçta LED kapalı.
      */
     ret = gpio_pin_configure_dt(
         &startup_led,
@@ -73,13 +77,16 @@ static int startup_led_init(void)
     }
 
     /*
-     * 2 saniye sonra kapat.
+     * Delayed work'ü hazırla.
      */
     k_work_init_delayable(
         &startup_led_off_work,
         startup_led_off
     );
 
+    /*
+     * 2000 ms = 2 saniye sonra LED'i kapat.
+     */
     k_work_schedule(
         &startup_led_off_work,
         K_MSEC(2000)
@@ -90,11 +97,7 @@ static int startup_led_init(void)
 
 
 /*
- * Uygulama başlarken çalışır.
- *
- * Soft Off'tan ESC ile uyanırken nRF52840
- * uygulamayı yeniden başlattığı için bu kod
- * tekrar çalışacak ve LED yine 2 saniye yanacaktır.
+ * Uygulama başlatılırken çalıştır.
  */
 SYS_INIT(
     startup_led_init,
