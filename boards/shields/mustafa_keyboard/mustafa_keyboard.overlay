@@ -55,28 +55,6 @@
 
     /*
      * ============================================================
-     * P0.15 ONBOARD LED
-     * ============================================================
-     *
-     * Nice!Nano / Pro Micro LED
-     * P0.15
-     *
-     * Active LOW:
-     *   logical 1 = LED ON
-     *   logical 0 = LED OFF
-     */
-
-    leds {
-        compatible = "gpio-leds";
-
-        startup_led: startup_led {
-            gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
-            label = "Startup LED";
-        };
-    };
-
-    /*
-     * ============================================================
      * SOFT OFF WAKE
      * ============================================================
      *
@@ -98,10 +76,6 @@
         trigger = <&soft_off_esc>;
         wakeup-source;
 
-        /*
-         * ESC column must be driven so ROW0 can detect ESC
-         * while the keyboard is in soft-off.
-         */
         extra-gpios = <&gpio0 24 GPIO_ACTIVE_HIGH>;
     };
 
