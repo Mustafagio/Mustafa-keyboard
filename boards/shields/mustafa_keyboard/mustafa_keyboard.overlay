@@ -54,10 +54,35 @@
     };
 
     /*
-     * Soft-off wake: ESC
+     * ============================================================
+     * P0.15 ONBOARD LED
+     * ============================================================
+     *
+     * Nice!Nano / Pro Micro LED
+     * P0.15
+     *
+     * Active LOW:
+     *   logical 1 = LED ON
+     *   logical 0 = LED OFF
+     */
+
+    leds {
+        compatible = "gpio-leds";
+
+        startup_led: startup_led {
+            gpios = <&gpio0 15 GPIO_ACTIVE_LOW>;
+            label = "Startup LED";
+        };
+    };
+
+    /*
+     * ============================================================
+     * SOFT OFF WAKE
+     * ============================================================
+     *
      * ESC = R0/C0
-     * Row = P0.06
-     * Col = P0.24
+     * ROW = P0.06
+     * COL = P0.24
      */
 
     keys {
@@ -72,25 +97,17 @@
         compatible = "zmk,gpio-key-wakeup-trigger";
         trigger = <&soft_off_esc>;
         wakeup-source;
+
+        /*
+         * ESC column must be driven so ROW0 can detect ESC
+         * while the keyboard is in soft-off.
+         */
         extra-gpios = <&gpio0 24 GPIO_ACTIVE_HIGH>;
     };
 
     soft_off_wakers {
         compatible = "zmk,soft-off-wakeup-sources";
         wakeup-sources = <&soft_off_wakeup>;
-    };
-
-    /*
-     * P0.15 LED TEST
-     *
-     * P0.15'i HIGH seviyesine çekiyoruz.
-     * Eğer onboard LED aktif-HIGH ise yanacak.
-     */
-
-    p015_led_test {
-        gpio-hog;
-        gpios = <15 GPIO_ACTIVE_HIGH>;
-        output-high;
     };
 
     chosen {
