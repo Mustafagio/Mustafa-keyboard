@@ -3,11 +3,6 @@
 #include <dt-bindings/zmk/bt.h>
 #include "keys_tr.h"
 
-/ {#include <behaviors.dtsi>
-#include <dt-bindings/zmk/keys.h>
-#include <dt-bindings/zmk/bt.h>
-#include "keys_tr.h"
-
 / {
     keymap {
         compatible = "zmk,keymap";
@@ -189,30 +184,16 @@
 
                 // =====================================================
                 // R1
-                // FN LOCK + MEDYA
+                // 14 TUŞ
                 // =====================================================
 
-                // FN + TAB = FN LOCK
-                &tog 1
-
-                // FN + Q = Ses -
-                &kp C_VOL_DN
-
-                // FN + W = Ses +
-                &kp C_VOL_UP
-
-                // FN + E = Sessiz
-                &kp C_MUTE
-
-                // FN + R = Önceki parça
-                &kp C_PREV
-
-                // FN + T = Oynat / Duraklat
-                &kp C_PP
-
-                // FN + Y = Sonraki parça
-                &kp C_NEXT
-
+                &trans
+                &trans
+                &trans
+                &trans
+                &trans
+                &trans
+                &trans
                 &trans
                 &trans
                 &trans
@@ -224,23 +205,14 @@
 
                 // =====================================================
                 // R2
-                // WINDOWS KISAYOLLARI
+                // 13 TUŞ
                 // =====================================================
 
                 &trans
-
-                // FN + A = Windows kilitle
-                &kp LG(L)
-
-                // FN + S = Print Screen
-                &kp PRINTSCREEN
-
-                // FN + D = Alt + Tab
-                &kp LA(TAB)
-
-                // FN + F = Ctrl + Shift + Esc
-                &kp LC(LS(ESC))
-
+                &trans
+                &trans
+                &trans
+                &trans
                 &trans
                 &trans
                 &trans
@@ -253,21 +225,13 @@
 
                 // =====================================================
                 // R3
-                // EKSTRA FONKSİYONLAR + BLUETOOTH
+                // 14 TUŞ
                 // =====================================================
 
-                // FN + Z = Ekran parlaklığı -
-                &kp C_BRI_DN
-
-                // FN + X = Ekran parlaklığı +
-                &kp C_BRI_UP
-
-                // FN + C = Hesap makinesi
-                &kp K_CALC
-
-                // FN + V = Web tarayıcı
-                &kp K_WWW
-
+                &trans
+                &trans
+                &trans
+                &trans
                 &trans
                 &trans
                 &trans
@@ -287,9 +251,10 @@
 
                 // =====================================================
                 // R4
-                // BLUETOOTH 0-1-2
+                // 9 TUŞ
                 // =====================================================
 
+                &trans
                 &trans
                 &trans
                 &trans
@@ -305,256 +270,6 @@
                 &bt BT_SEL 1
 
                 // Bluetooth profil 2
-                &bt BT_SEL 2
-            >;
-        };
-    };
-};
-    keymap {
-        compatible = "zmk,keymap";
-
-        // =============================================================
-        // TÜRKÇE Q BASE LAYER
-        // =============================================================
-
-        base_layer {
-            display-name = "Türkçe Q";
-
-            bindings = <
-                // =====================================================
-                // R0
-                // ESC 1 2 3 4 5 6 7 8 9 0 * - BACKSPACE
-                // =====================================================
-
-                &kp ESC
-
-                &kp TR_N1
-                &kp TR_N2
-                &kp TR_N3
-                &kp TR_N4
-                &kp TR_N5
-                &kp TR_N6
-                &kp TR_N7
-                &kp TR_N8
-                &kp TR_N9
-                &kp TR_N0
-
-                // * ?
-                &kp TR_ASTERISK
-
-                // - _
-                &kp TR_MINUS
-
-                &kp BSPC
-
-
-                // =====================================================
-                // R1
-                // TAB Q W E R T Y U I O P Ğ Ü ,
-                // =====================================================
-
-                &kp TAB
-
-                &kp TR_Q
-                &kp TR_W
-                &kp TR_E
-                &kp TR_R
-                &kp TR_T
-                &kp TR_Y
-                &kp TR_U
-
-                // ı
-                &kp TR_I_DOTLESS
-
-                &kp TR_O
-                &kp TR_P
-
-                // Ğ
-                &kp TR_E_BREVE
-
-                // Ü
-                &kp TR_U_UMLAUT
-
-                // ,
-                &kp TR_COMMA
-
-
-                // =====================================================
-                // R2
-                // CAPS A S D F G H J K L Ş İ ENTER
-                // =====================================================
-
-                &kp CAPSLOCK
-
-                &kp TR_A
-                &kp TR_S
-                &kp TR_D
-                &kp TR_F
-                &kp TR_G
-                &kp TR_H
-                &kp TR_J
-                &kp TR_K
-                &kp TR_L
-
-                // Ş
-                &kp TR_S_CEDILLA
-
-                // İ
-                &kp TR_I_DOT
-
-                &kp ENTER
-
-
-                // =====================================================
-                // R3
-                // SHIFT Z X C V B N M Ö Ç . SHIFT UP DEL
-                // =====================================================
-
-                &kp LSHIFT
-
-                &kp TR_Z
-                &kp TR_X
-                &kp TR_C
-                &kp TR_V
-                &kp TR_B
-                &kp TR_N
-                &kp TR_M
-
-                // Ö
-                &kp TR_O_UMLAUT
-
-                // Ç
-                &kp TR_C_CEDILLA
-
-                // .
-                &kp TR_PERIOD
-
-                &kp RSHIFT
-
-                &kp UP
-                &kp DEL
-
-
-                // =====================================================
-                // R4
-                // CTRL WIN ALT SPACE ALTGR FN LEFT DOWN RIGHT
-                // =====================================================
-
-                &kp LCTRL
-                &kp LGUI
-                &kp LALT
-                &kp SPACE
-                &kp RALT
-                &mo 1
-                &kp LEFT
-                &kp DOWN
-                &kp RIGHT
-            >;
-        };
-
-
-        // =============================================================
-        // FN LAYER
-        // =============================================================
-
-        fn_layer {
-            display-name = "FN";
-
-            bindings = <
-                // =====================================================
-                // R0
-                // ESC F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 F12 BSPC
-                // =====================================================
-
-                &soft_off
-
-                &kp F1
-                &kp F2
-                &kp F3
-                &kp F4
-                &kp F5
-                &kp F6
-                &kp F7
-                &kp F8
-                &kp F9
-                &kp F10
-                &kp F11
-                &kp F12
-
-                &kp BSPC
-
-
-                // =====================================================
-                // R1 - 14 TUŞ
-                // =====================================================
-
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-
-
-                // =====================================================
-                // R2 - 13 TUŞ
-                // =====================================================
-
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-
-
-                // =====================================================
-                // R3 - 14 TUŞ
-                // =====================================================
-
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &bt BT_SEL 3
-                &bt BT_SEL 4
-                &trans
-
-
-                // =====================================================
-                // R4 - 9 TUŞ
-                // =====================================================
-
-                &trans
-                &trans
-                &trans
-                &trans
-                &trans
-                &mo 1
-                &bt BT_SEL 0
-                &bt BT_SEL 1
                 &bt BT_SEL 2
             >;
         };
