@@ -5,13 +5,12 @@
 #include <zmk/event_manager.h>
 #include <zmk/activity.h>
 #include <zmk/events/activity_state_changed.h>
-
-#include <zephyr/pm/pm.h>
+#include <zmk/pm.h>
 
 #if defined(CONFIG_ZMK_PM_SOFT_OFF)
 
 /* ============================================================
- * AUTO OFF
+ * MUSTAFA KEYBOARD - AUTO OFF
  *
  * Test süreleri:
  *
@@ -46,19 +45,13 @@ static void auto_off_work_handler(
     );
 
     /*
-     * ZMK/Zephyr güç yönetimi üzerinden
-     * sistemi soft-off durumuna geçir.
+     * ZMK'nin kendi Soft Off mekanizmasını kullan.
+     *
+     * Bu, FN + ESC ile çalışan Soft Off
+     * mekanizmasının aynısıdır.
      */
 
-    pm_state_force(
-        0,
-        &(struct pm_state_info){
-            .state = PM_STATE_SOFT_OFF,
-            .substate_id = 0,
-            .min_residency_us = 0,
-            .exit_latency_us = 0
-        }
-    );
+    zmk_pm_soft_off();
 }
 
 
@@ -69,6 +62,7 @@ static void auto_off_work_handler(
 static void auto_off_reset_timer(void)
 {
     if (auto_off_timeout_ms == 0) {
+
         k_work_cancel_delayable(
             &auto_off_work
         );
@@ -86,7 +80,7 @@ static void auto_off_reset_timer(void)
 /* ============================================================
  * ACTIVITY EVENT
  *
- * Her klavye aktivitesinde zamanlayıcı sıfırlanır.
+ * Klavye aktif olduğunda zamanlayıcı yeniden başlar.
  * ============================================================ */
 
 static int auto_off_activity_listener(
@@ -105,24 +99,31 @@ static int auto_off_activity_listener(
 
     case ZMK_ACTIVITY_ACTIVE:
 
+        /*
+         * Her tuş aktivitesinde
+         * otomatik kapanma süresini
+         * yeniden başlat.
+         */
+
         auto_off_reset_timer();
 
         break;
 
+
     case ZMK_ACTIVITY_IDLE:
 
         /*
-         * Idle olduğunda timer zaten
-         * çalışıyor olacak.
+         * Timer zaten çalışıyor.
          */
 
         break;
 
+
     case ZMK_ACTIVITY_SLEEP:
 
         /*
-         * ZMK zaten uykuya geçiyorsa
-         * bizim timer'a gerek yok.
+         * ZMK başka bir güç durumuna
+         * geçtiyse bizim timer'ı iptal et.
          */
 
         k_work_cancel_delayable(
@@ -130,6 +131,7 @@ static int auto_off_activity_listener(
         );
 
         break;
+
 
     default:
         break;
@@ -152,9 +154,17 @@ ZMK_SUBSCRIPTION(
 
 
 /* ============================================================
- * SÜRE AYARLA
+ * AUTO OFF SÜRESİNİ AYARLA
  *
  * control_service.c tarafından çağrılacak.
+ *
+ * Örnek:
+ *
+ * 0      = Kapalı
+ * 2000   = 2 saniye
+ * 10000  = 10 saniye
+ * 15000  = 15 saniye
+ * 20000  = 20 saniye
  * ============================================================ */
 
 void mustafa_auto_off_set(
@@ -163,9 +173,19 @@ void mustafa_auto_off_set(
     auto_off_timeout_ms =
         timeout_ms;
 
+    /*
+     * Eski timer'ı iptal et.
+     */
+
     k_work_cancel_delayable(
         &auto_off_work
     );
+
+
+    /*
+     * Kapalı seçildiyse
+     * hiçbir timer başlatma.
+     */
 
     if (auto_off_timeout_ms == 0) {
 
@@ -176,14 +196,15 @@ void mustafa_auto_off_set(
         return;
     }
 
+
     printk(
         "Mustafa Auto-Off: %u ms\n",
         auto_off_timeout_ms
     );
 
+
     /*
-     * Yeni süre seçildiği anda
-     * sayaç başlasın.
+     * Yeni süreyle timer'ı başlat.
      */
 
     auto_off_reset_timer();
@@ -191,7 +212,7 @@ void mustafa_auto_off_set(
 
 
 /* ============================================================
- * BAŞLANGIÇ
+ * INITIALIZE
  * ============================================================ */
 
 static int mustafa_auto_off_init(void)
