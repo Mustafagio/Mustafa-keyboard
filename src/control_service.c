@@ -233,23 +233,23 @@ static ssize_t control_write(
             break;
 
         case 0x02:
-            timeout_ms = 2000;
+            timeout_ms = 120000;
             break;
 
         case 0x05:
-            timeout_ms = 5000;
+            timeout_ms = 300000;
             break;
 
         case 0x0A:
-            timeout_ms = 10000;
+            timeout_ms = 600000;
             break;
 
         case 0x0F:
-            timeout_ms = 15000;
+            timeout_ms = 900000;
             break;
 
         case 0x14:
-            timeout_ms = 20000;
+            timeout_ms = 1200000;
             break;
 
         default:
