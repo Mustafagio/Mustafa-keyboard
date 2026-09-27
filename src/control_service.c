@@ -53,6 +53,8 @@ extern void mustafa_auto_off_set(
 
 extern uint32_t mustafa_auto_off_get(void);
 
+extern uint32_t mustafa_auto_off_remaining_ms(void);
+
 /* =========================================================
  * BLUE LED
  * ========================================================= */
@@ -66,6 +68,10 @@ static void notify_active_profile(
 
 static void notify_auto_off(
     uint8_t setting
+);
+
+static void notify_auto_off_remaining(
+    uint32_t remaining_ms
 );
 
 /* =========================================================
@@ -279,6 +285,42 @@ static ssize_t control_write(
     }
 
     /* =====================================================
+     * 0x32 = AUTO-OFF REMAINING TIME REQUEST
+     *
+     * WPF:
+     *   0x32
+     *
+     * Firmware response:
+     *   0x32 + 4 byte uint32
+     *
+     * Değer:
+     *   kalan süre (ms)
+     *
+     * Örnek:
+     *   5 dakika ayarlı
+     *   4 dakika 37 saniye kaldı
+     *
+     *   0x32 + 277000
+     * ===================================================== */
+
+    if (data[0] == 0x32) {
+
+        uint32_t remaining_ms =
+            mustafa_auto_off_remaining_ms();
+
+        notify_auto_off_remaining(
+            remaining_ms
+        );
+
+        printk(
+            "Mustafa Auto-Off remaining: %u ms\n",
+            remaining_ms
+        );
+
+        return len;
+    }
+
+    /* =====================================================
      * 0x30 = AUTO-OFF
      *
      * 0x30 0x00 = KAPALI
@@ -439,6 +481,50 @@ static void notify_auto_off(
 
         printk(
             "Auto-Off notify failed: %d\n",
+            ret
+        );
+    }
+}
+
+/* =========================================================
+ * AUTO-OFF REMAINING NOTIFY
+ *
+ * Response:
+ *
+ * Byte 0 = 0x32
+ * Byte 1 = remaining_ms byte 0
+ * Byte 2 = remaining_ms byte 1
+ * Byte 3 = remaining_ms byte 2
+ * Byte 4 = remaining_ms byte 3
+ *
+ * Little-endian
+ * ========================================================= */
+
+static void notify_auto_off_remaining(
+    uint32_t remaining_ms
+)
+{
+    uint8_t data[5] =
+    {
+        0x32,
+        (uint8_t)(remaining_ms & 0xFF),
+        (uint8_t)((remaining_ms >> 8) & 0xFF),
+        (uint8_t)((remaining_ms >> 16) & 0xFF),
+        (uint8_t)((remaining_ms >> 24) & 0xFF)
+    };
+
+    int ret =
+        bt_gatt_notify(
+            NULL,
+            &mustafa_control_service.attrs[2],
+            data,
+            sizeof(data)
+        );
+
+    if (ret < 0) {
+
+        printk(
+            "Auto-Off remaining notify failed: %d\n",
             ret
         );
     }
