@@ -8,27 +8,53 @@
 
 #if defined(CONFIG_ZMK_PM_SOFT_OFF)
 
-/* ============================================================
- * MUSTAFA KEYBOARD - AUTO OFF
- *
- * 0      = OFF
- * 2000   = 2 seconds
- * 5000   = 5 seconds
- * 10000  = 10 seconds
- * 15000  = 15 seconds
- * 20000  = 20 seconds
- * 120000 = 2 minutes
- * 300000 = 5 minutes
- * 600000 = 10 minutes
- * 900000 = 15 minutes
- * 1200000 = 20 minutes
- * ============================================================ */
+/* =========================================================
+ * STARTUP_LED.C API
+ * ========================================================= */
 
-static uint32_t auto_off_timeout_ms;
+extern void mustafa_shutdown_warning_start(
+    void (*callback)(void)
+);
+
+extern void mustafa_shutdown_warning_cancel(void);
+
+/* =========================================================
+ * AUTO-OFF DURUMU
+ * ========================================================= */
+
+static uint32_t auto_off_timeout_ms = 0;
+
 static struct k_work_delayable auto_off_work;
 
-extern void mustafa_start_shutdown_sequence(void);
-extern void mustafa_cancel_shutdown_sequence(void);
+static bool shutdown_warning_active = false;
+
+/* =========================================================
+ * 2 SANİYELİK LED UYARISI BİTTİKTEN SONRA
+ * ========================================================= */
+
+static void auto_off_soft_off_complete(void)
+{
+    /*
+     * Auto-Off bu sırada kapatılmışsa Soft Off yapma.
+     */
+    if (auto_off_timeout_ms == 0) {
+        shutdown_warning_active = false;
+        return;
+    }
+
+    shutdown_warning_active = false;
+
+    printk(
+        "Mustafa Auto-Off: Soft Off\n"
+    );
+
+    /* Soft Off işleminin sahibi auto_off.c'dir. */
+    zmk_pm_soft_off();
+}
+
+/* =========================================================
+ * AUTO-OFF TIMER
+ * ========================================================= */
 
 static void auto_off_work_handler(struct k_work *work)
 {
@@ -38,13 +64,25 @@ static void auto_off_work_handler(struct k_work *work)
         return;
     }
 
+    /*
+     * Süre doldu.
+     * Önce 2 saniyelik LED uyarısını başlat.
+     * LED animasyonu tamamlanınca callback Soft Off yapacak.
+     */
+    shutdown_warning_active = true;
+
     printk(
-        "Mustafa Auto-Off: warning LED, then Soft Off\n"
+        "Mustafa Auto-Off: 2 second warning\n"
     );
 
-    /* Önce 2 saniyelik LED uyarısı; ardından startup_led.c Soft Off yapar. */
-    mustafa_start_shutdown_sequence();
+    mustafa_shutdown_warning_start(
+        auto_off_soft_off_complete
+    );
 }
+
+/* =========================================================
+ * AUTO-OFF TIMER'I YENİDEN BAŞLAT
+ * ========================================================= */
 
 static void auto_off_reset_timer(void)
 {
@@ -59,10 +97,14 @@ static void auto_off_reset_timer(void)
     );
 }
 
-/*
- * Matrix position-state eventleri her tuş basma/bırakma olayında
- * gelir. Böylece seçilen Auto-Off süresi her tuş olayında yeniden başlar.
- */
+/* =========================================================
+ * TUŞ / MATRIX EVENT
+ *
+ * Herhangi bir key event geldiğinde:
+ * - Eğer LED uyarısı çalışıyorsa iptal edilir.
+ * - Auto-Off sayacı yeniden başlar.
+ * ========================================================= */
+
 static int auto_off_position_listener(const zmk_event_t *eh)
 {
     struct zmk_position_state_changed *event;
@@ -73,8 +115,11 @@ static int auto_off_position_listener(const zmk_event_t *eh)
         return 0;
     }
 
-    /* Uyarı LED'i sırasında kullanıcı tuşa basarsa kapanmayı iptal et. */
-    mustafa_cancel_shutdown_sequence();
+    if (shutdown_warning_active) {
+        shutdown_warning_active = false;
+
+        mustafa_shutdown_warning_cancel();
+    }
 
     auto_off_reset_timer();
 
@@ -91,16 +136,34 @@ ZMK_SUBSCRIPTION(
     zmk_position_state_changed
 );
 
-/* Called by control_service.c. */
+/* =========================================================
+ * WPF TARAFINDAN AUTO-OFF AYARI
+ *
+ * timeout_ms:
+ * 0      = Kapalı
+ * 2000   = 2 saniye
+ * 5000   = 5 saniye
+ * 10000  = 10 saniye
+ * 15000  = 15 saniye
+ * 20000  = 20 saniye
+ * ========================================================= */
+
 void mustafa_auto_off_set(uint32_t timeout_ms)
 {
     auto_off_timeout_ms = timeout_ms;
 
+    /* Eski timer'ı iptal et. */
     k_work_cancel_delayable(&auto_off_work);
-    mustafa_cancel_shutdown_sequence();
+
+    /* Devam eden LED uyarısı varsa onu da iptal et. */
+    shutdown_warning_active = false;
+    mustafa_shutdown_warning_cancel();
 
     if (auto_off_timeout_ms == 0) {
-        printk("Mustafa Auto-Off: OFF\n");
+        printk(
+            "Mustafa Auto-Off: OFF\n"
+        );
+
         return;
     }
 
@@ -112,6 +175,10 @@ void mustafa_auto_off_set(uint32_t timeout_ms)
     auto_off_reset_timer();
 }
 
+/* =========================================================
+ * INIT
+ * ========================================================= */
+
 static int mustafa_auto_off_init(void)
 {
     k_work_init_delayable(
@@ -119,7 +186,9 @@ static int mustafa_auto_off_init(void)
         auto_off_work_handler
     );
 
-    printk("Mustafa Auto-Off initialized\n");
+    printk(
+        "Mustafa Auto-Off initialized\n"
+    );
 
     return 0;
 }
@@ -130,4 +199,4 @@ SYS_INIT(
     95
 );
 
-#endif /* CONFIG_ZMK_PM_SOFT_OFF */
+#endif
