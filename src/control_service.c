@@ -4,13 +4,17 @@
 #include <zephyr/bluetooth/uuid.h>
 #include <zephyr/sys/printk.h>
 
+#if defined(CONFIG_ZMK_BLE)
+
 /*
- * Mustafa Keyboard Control Service
+ * ============================================================
+ * MUSTAFA KEYBOARD CONTROL SERVICE
+ * ============================================================
  *
- * Service UUID:
+ * Service:
  * 8e2f0000-7c31-4b9a-9d21-4f6e3a120001
  *
- * Control Characteristic:
+ * Control:
  * 8e2f0001-7c31-4b9a-9d21-4f6e3a120001
  */
 
@@ -109,3 +113,5 @@ BT_GATT_SERVICE_DEFINE(
         NULL
     )
 );
+
+#endif /* CONFIG_ZMK_BLE */
