@@ -1,337 +1,202 @@
 #include <zephyr/kernel.h>
-#include <zephyr/device.h>
-#include <zephyr/devicetree.h>
-#include <zephyr/drivers/gpio.h>
-
-#include <zephyr/bluetooth/bluetooth.h>
-#include <zephyr/bluetooth/gatt.h>
-#include <zephyr/bluetooth/uuid.h>
-
+#include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
 
-#include <zmk/ble.h>
 #include <zmk/event_manager.h>
-#include <zmk/events/ble_active_profile_changed.h>
+#include <zmk/events/position_state_changed.h>
+#include <zmk/pm.h>
 
-#if defined(CONFIG_ZMK_BLE)
+#if defined(CONFIG_ZMK_PM_SOFT_OFF)
 
-#define BT_UUID_MUSTAFA_SERVICE_VAL \
-    BT_UUID_128_ENCODE( \
-        0x8e2f0000, \
-        0x7c31, \
-        0x4b9a, \
-        0x9d21, \
-        0x4f6e3a120001 \
-    )
+/* =========================================================
+ * STARTUP_LED.C API
+ * ========================================================= */
 
-#define BT_UUID_MUSTAFA_SERVICE \
-    BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_SERVICE_VAL)
-
-#define BT_UUID_MUSTAFA_CONTROL_VAL \
-    BT_UUID_128_ENCODE( \
-        0x8e2f0001, \
-        0x7c31, \
-        0x4b9a, \
-        0x9d21, \
-        0x4f6e3a120001 \
-    )
-
-#define BT_UUID_MUSTAFA_CONTROL \
-    BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_CONTROL_VAL)
-
-extern void mustafa_auto_off_set(uint32_t timeout_ms);
-
-static const struct gpio_dt_spec blue_led =
-    GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
-
-static void notify_active_profile(uint8_t profile);
-
-static ssize_t control_write(
-    struct bt_conn *conn,
-    const struct bt_gatt_attr *attr,
-    const void *buf,
-    uint16_t len,
-    uint16_t offset,
-    uint8_t flags)
-{
-    const uint8_t *data = buf;
-
-    ARG_UNUSED(conn);
-    ARG_UNUSED(attr);
-    ARG_UNUSED(flags);
-
-    if (offset != 0) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
-    }
-
-    if (len == 0) {
-        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-    }
-
-    printk("Mustafa Keyboard Control: %d byte\n", len);
-
-    for (uint16_t i = 0; i < len; i++) {
-        printk("DATA[%d] = 0x%02X\n", i, data[i]);
-    }
-
-    /* ------------------------------------------------------------
-     * 0x01 = LED ON
-     * ------------------------------------------------------------ */
-    if (data[0] == 0x01) {
-        if (device_is_ready(blue_led.port)) {
-            gpio_pin_set_dt(&blue_led, 1);
-            printk("Mustafa LED: ON\n");
-        }
-
-        return len;
-    }
-
-    /* ------------------------------------------------------------
-     * 0x02 = LED OFF
-     * ------------------------------------------------------------ */
-    if (data[0] == 0x02) {
-        if (device_is_ready(blue_led.port)) {
-            gpio_pin_set_dt(&blue_led, 0);
-            printk("Mustafa LED: OFF\n");
-        }
-
-        return len;
-    }
-
-    /* ------------------------------------------------------------
-     * 0x10 profile select
-     * ------------------------------------------------------------ */
-    if (data[0] == 0x10) {
-        if (len < 2) {
-            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-        }
-
-        uint8_t profile = data[1];
-
-        if (profile > 4) {
-            return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
-        }
-
-        int ret = zmk_ble_prof_select(profile);
-
-        if (ret < 0) {
-            return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
-        }
-
-        printk(
-            "Bluetooth profile selected: %d\n",
-            profile
-        );
-
-        return len;
-    }
-
-    /* ------------------------------------------------------------
-     * 0x21 = request current active profile
-     * ------------------------------------------------------------ */
-    if (data[0] == 0x21) {
-        int profile = zmk_ble_active_profile_index();
-
-        if (profile < 0 || profile > 4) {
-            return BT_GATT_ERR(BT_ATT_ERR_UNLIKELY);
-        }
-
-        notify_active_profile((uint8_t)profile);
-
-        return len;
-    }
-
-    /* ------------------------------------------------------------
-     * 0x30 = Auto-Off
-     *
-     * 30 00 = OFF
-     * Saniye:
-     * 30 02 = 2 saniye
-     * 30 05 = 5 saniye
-     * 30 0A = 10 saniye
-     * 30 0F = 15 saniye
-     * 30 14 = 20 saniye
-     *
-     * Dakika (0x80 biti):
-     * 30 82 = 2 dakika
-     * 30 85 = 5 dakika
-     * 30 8A = 10 dakika
-     * 30 8F = 15 dakika
-     * 30 94 = 20 dakika
-     * ------------------------------------------------------------ */
-    if (data[0] == 0x30) {
-        if (len < 2) {
-            return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
-        }
-
-        uint8_t setting = data[1];
-        uint32_t timeout_ms = 0;
-
-        switch (setting) {
-        case 0x00:
-            timeout_ms = 0;
-            break;
-
-        /* Saniye */
-        case 0x02:
-            timeout_ms = 2U * 1000U;
-            break;
-
-        case 0x05:
-            timeout_ms = 5U * 1000U;
-            break;
-
-        case 0x0A:
-            timeout_ms = 10U * 1000U;
-            break;
-
-        case 0x0F:
-            timeout_ms = 15U * 1000U;
-            break;
-
-        case 0x14:
-            timeout_ms = 20U * 1000U;
-            break;
-
-        /* Dakika: 0x80 biti süre birimini dakika yapar. */
-        case 0x82:
-            timeout_ms = 2U * 60U * 1000U;
-            break;
-
-        case 0x85:
-            timeout_ms = 5U * 60U * 1000U;
-            break;
-
-        case 0x8A:
-            timeout_ms = 10U * 60U * 1000U;
-            break;
-
-        case 0x8F:
-            timeout_ms = 15U * 60U * 1000U;
-            break;
-
-        case 0x94:
-            timeout_ms = 20U * 60U * 1000U;
-            break;
-
-        default:
-            return BT_GATT_ERR(BT_ATT_ERR_VALUE_NOT_ALLOWED);
-        }
-
-        mustafa_auto_off_set(timeout_ms);
-
-        printk(
-            "Mustafa Auto-Off setting: 0x%02X (%u ms)\n",
-            setting,
-            timeout_ms
-        );
-
-        return len;
-    }
-
-    return len;
-}
-
-BT_GATT_SERVICE_DEFINE(
-    mustafa_control_service,
-
-    BT_GATT_PRIMARY_SERVICE(
-        BT_UUID_MUSTAFA_SERVICE
-    ),
-
-    BT_GATT_CHARACTERISTIC(
-        BT_UUID_MUSTAFA_CONTROL,
-        BT_GATT_CHRC_WRITE |
-        BT_GATT_CHRC_WRITE_WITHOUT_RESP |
-        BT_GATT_CHRC_NOTIFY,
-        BT_GATT_PERM_WRITE,
-        NULL,
-        control_write,
-        NULL
-    ),
-
-    BT_GATT_CCC(
-        NULL,
-        BT_GATT_PERM_READ |
-        BT_GATT_PERM_WRITE
-    )
+extern void mustafa_shutdown_warning_start(
+    void (*callback)(void)
 );
 
-static void notify_active_profile(
-    uint8_t profile)
-{
-    uint8_t data[2] = {
-        0x20,
-        profile
-    };
+extern void mustafa_shutdown_warning_cancel(void);
 
-    int ret = bt_gatt_notify(
-        NULL,
-        &mustafa_control_service.attrs[2],
-        data,
-        sizeof(data)
+/* =========================================================
+ * AUTO-OFF DURUMU
+ * ========================================================= */
+
+static uint32_t auto_off_timeout_ms = 0;
+
+static struct k_work_delayable auto_off_work;
+
+static bool shutdown_warning_active = false;
+
+/* =========================================================
+ * 2 SANİYELİK LED UYARISI BİTTİKTEN SONRA
+ * ========================================================= */
+
+static void auto_off_soft_off_complete(void)
+{
+    /*
+     * Auto-Off bu sırada kapatılmışsa Soft Off yapma.
+     */
+    if (auto_off_timeout_ms == 0) {
+        shutdown_warning_active = false;
+        return;
+    }
+
+    shutdown_warning_active = false;
+
+    printk(
+        "Mustafa Auto-Off: Soft Off\n"
     );
 
-    if (ret < 0) {
-        printk(
-            "Profile notify failed: %d\n",
-            ret
-        );
-    }
+    /* Soft Off işleminin sahibi auto_off.c'dir. */
+    zmk_pm_soft_off();
 }
 
-static int active_profile_listener(
-    const zmk_event_t *eh)
-{
-    struct zmk_ble_active_profile_changed *event;
+/* =========================================================
+ * AUTO-OFF TIMER
+ * ========================================================= */
 
-    event =
-        as_zmk_ble_active_profile_changed(eh);
+static void auto_off_work_handler(struct k_work *work)
+{
+    ARG_UNUSED(work);
+
+    if (auto_off_timeout_ms == 0) {
+        return;
+    }
+
+    /*
+     * Süre doldu.
+     * Önce 2 saniyelik LED uyarısını başlat.
+     * LED animasyonu tamamlanınca callback Soft Off yapacak.
+     */
+    shutdown_warning_active = true;
+
+    printk(
+        "Mustafa Auto-Off: 2 second warning\n"
+    );
+
+    mustafa_shutdown_warning_start(
+        auto_off_soft_off_complete
+    );
+}
+
+/* =========================================================
+ * AUTO-OFF TIMER'I YENİDEN BAŞLAT
+ * ========================================================= */
+
+static void auto_off_reset_timer(void)
+{
+    if (auto_off_timeout_ms == 0) {
+        k_work_cancel_delayable(&auto_off_work);
+        return;
+    }
+
+    k_work_reschedule(
+        &auto_off_work,
+        K_MSEC(auto_off_timeout_ms)
+    );
+}
+
+/* =========================================================
+ * TUŞ / MATRIX EVENT
+ *
+ * Herhangi bir key event geldiğinde:
+ * - Eğer LED uyarısı çalışıyorsa iptal edilir.
+ * - Auto-Off sayacı yeniden başlar.
+ * ========================================================= */
+
+static int auto_off_position_listener(const zmk_event_t *eh)
+{
+    struct zmk_position_state_changed *event;
+
+    event = as_zmk_position_state_changed(eh);
 
     if (event == NULL) {
         return 0;
     }
 
-    if (event->index > 4) {
-        return 0;
+    if (shutdown_warning_active) {
+        shutdown_warning_active = false;
+
+        mustafa_shutdown_warning_cancel();
     }
 
-    notify_active_profile(
-        event->index
-    );
+    auto_off_reset_timer();
 
     return 0;
 }
 
 ZMK_LISTENER(
-    active_profile_listener,
-    active_profile_listener
+    auto_off_position_listener,
+    auto_off_position_listener
 );
 
 ZMK_SUBSCRIPTION(
-    active_profile_listener,
-    zmk_ble_active_profile_changed
+    auto_off_position_listener,
+    zmk_position_state_changed
 );
 
-static int mustafa_control_init(void)
+/* =========================================================
+ * WPF TARAFINDAN AUTO-OFF AYARI
+ *
+ * timeout_ms:
+ * 0      = Kapalı
+ * 2000   = 2 saniye
+ * 5000   = 5 saniye
+ * 10000  = 10 saniye
+ * 15000  = 15 saniye
+ * 20000  = 20 saniye
+ * ========================================================= */
+
+void mustafa_auto_off_set(uint32_t timeout_ms)
 {
-    if (!device_is_ready(blue_led.port)) {
-        return -ENODEV;
+    auto_off_timeout_ms = timeout_ms;
+
+    /* Eski timer'ı iptal et. */
+    k_work_cancel_delayable(&auto_off_work);
+
+    /* Devam eden LED uyarısı varsa onu da iptal et. */
+    shutdown_warning_active = false;
+    mustafa_shutdown_warning_cancel();
+
+    if (auto_off_timeout_ms == 0) {
+        printk(
+            "Mustafa Auto-Off: OFF\n"
+        );
+
+        return;
     }
 
-    /* LED GPIO'sunu startup_led.c yapılandırır. Burada tekrar
-     * configure etmiyoruz; aksi halde açılış LED'i söndürülebilir. */
     printk(
-        "Mustafa Control Service initialized\n"
+        "Mustafa Auto-Off: %u ms\n",
+        auto_off_timeout_ms
+    );
+
+    auto_off_reset_timer();
+}
+
+/* =========================================================
+ * INIT
+ * ========================================================= */
+
+static int mustafa_auto_off_init(void)
+{
+    k_work_init_delayable(
+        &auto_off_work,
+        auto_off_work_handler
+    );
+
+    printk(
+        "Mustafa Auto-Off initialized\n"
     );
 
     return 0;
 }
 
 SYS_INIT(
-    mustafa_control_init,
+    mustafa_auto_off_init,
     APPLICATION,
-    90
+    95
 );
 
-#endif /* CONFIG_ZMK_BLE */
+#endif
