@@ -3,15 +3,15 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/devicetree.h>
 
-#include <zmk/event_manager.h>
-#include <zmk/activity.h>
-#include <zmk/events/activity_state_changed.h>
+#include <zmk/pm.h>
 
 static const struct gpio_dt_spec startup_led =
     GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
 /* ---------------------------------------------------------
  * AÇILIŞ LED'İ
+ *
+ * Kart açıldığında LED 2 saniye sürekli yanar.
  * --------------------------------------------------------- */
 
 static struct k_work_delayable startup_led_off_work;
@@ -23,29 +23,36 @@ static void startup_led_off(struct k_work *work)
     gpio_pin_set_dt(&startup_led, 0);
 }
 
-
 /* ---------------------------------------------------------
  * OTOMATİK KAPANMA LED ANİMASYONU
  *
- * 2 saniye boyunca hızlı yanıp söner.
- * 100 ms ON / 100 ms OFF
+ * 2 saniye boyunca 100 ms ON / 100 ms OFF.
+ * Animasyon tamamlanınca Soft Off yapılır.
  * --------------------------------------------------------- */
 
 static struct k_work_delayable shutdown_led_work;
-
-static int shutdown_blink_count = 0;
+static int shutdown_blink_count;
+static bool shutdown_sequence_active;
 
 static void shutdown_led_blink(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    if (shutdown_blink_count >= 20) {
+    if (!shutdown_sequence_active) {
         gpio_pin_set_dt(&startup_led, 0);
         return;
     }
 
-    gpio_pin_toggle_dt(&startup_led);
+    if (shutdown_blink_count >= 20) {
+        gpio_pin_set_dt(&startup_led, 0);
+        shutdown_sequence_active = false;
 
+        /* LED uyarısı tamamlandı; şimdi gerçek Soft Off. */
+        zmk_pm_soft_off();
+        return;
+    }
+
+    gpio_pin_toggle_dt(&startup_led);
     shutdown_blink_count++;
 
     k_work_schedule(
@@ -54,99 +61,44 @@ static void shutdown_led_blink(struct k_work *work)
     );
 }
 
-
 /* ---------------------------------------------------------
- * ACTIVITY EVENT
- *
- * Klavye 5 dakika kullanılmadığında:
- *
- * ACTIVE
- *   ↓
- * IDLE
- *   ↓
- * LED hızlı yanıp söner
- *   ↓
- * 2 saniye sonra ZMK deep sleep
+ * AUTO-OFF MODÜLÜ TARAFINDAN ÇAĞRILIR
  * --------------------------------------------------------- */
 
-static int led_activity_listener(const zmk_event_t *eh)
+void mustafa_start_shutdown_sequence(void)
 {
-    struct zmk_activity_state_changed *event;
-
-    event = as_zmk_activity_state_changed(eh);
-
-    if (event == NULL) {
-        return 0;
+    if (!device_is_ready(startup_led.port)) {
+        /* LED kullanılamıyorsa Soft Off'u bekletme. */
+        zmk_pm_soft_off();
+        return;
     }
 
-    switch (event->state) {
+    k_work_cancel_delayable(&startup_led_off_work);
+    k_work_cancel_delayable(&shutdown_led_work);
 
-    case ZMK_ACTIVITY_ACTIVE:
+    shutdown_blink_count = 0;
+    shutdown_sequence_active = true;
 
-        /*
-         * Bir tuşa basıldı.
-         * Olası kapanma animasyonunu iptal et.
-         */
+    gpio_pin_set_dt(&startup_led, 0);
 
-        k_work_cancel_delayable(&shutdown_led_work);
-
-        shutdown_blink_count = 0;
-
-        gpio_pin_set_dt(&startup_led, 0);
-
-        break;
-
-
-    case ZMK_ACTIVITY_IDLE:
-
-        /*
-         * 5 dakika boyunca hiçbir tuşa basılmadı.
-         * Kapanış animasyonunu başlat.
-         */
-
-        shutdown_blink_count = 0;
-
-        k_work_cancel_delayable(&shutdown_led_work);
-
-        k_work_schedule(
-            &shutdown_led_work,
-            K_NO_WAIT
-        );
-
-        break;
-
-
-    case ZMK_ACTIVITY_SLEEP:
-
-        /*
-         * ZMK artık power-off durumuna geçiyor.
-         */
-
-        k_work_cancel_delayable(&shutdown_led_work);
-
-        gpio_pin_set_dt(&startup_led, 0);
-
-        break;
-
-
-    default:
-        break;
-    }
-
-    return 0;
+    k_work_schedule(
+        &shutdown_led_work,
+        K_NO_WAIT
+    );
 }
 
+/*
+ * Uyarı animasyonu sırasında tuşa basılırsa Auto-Off tarafı bunu
+ * çağırarak kapanış animasyonunu iptal eder.
+ */
+void mustafa_cancel_shutdown_sequence(void)
+{
+    shutdown_sequence_active = false;
+    shutdown_blink_count = 0;
 
-ZMK_LISTENER(
-    led_activity_listener,
-    led_activity_listener
-);
-
-ZMK_SUBSCRIPTION(
-    led_activity_listener,
-    zmk_activity_state_changed
-);
-
+    k_work_cancel_delayable(&shutdown_led_work);
+    gpio_pin_set_dt(&startup_led, 0);
+}
 
 /* ---------------------------------------------------------
  * STARTUP LED INIT
@@ -169,23 +121,6 @@ static int startup_led_init(void)
         return ret;
     }
 
-    /*
-     * Açılışta LED'i yak.
-     */
-
-    ret = gpio_pin_set_dt(
-        &startup_led,
-        1
-    );
-
-    if (ret < 0) {
-        return ret;
-    }
-
-    /*
-     * 2 saniye sonra kapat.
-     */
-
     k_work_init_delayable(
         &startup_led_off_work,
         startup_led_off
@@ -196,6 +131,16 @@ static int startup_led_init(void)
         shutdown_led_blink
     );
 
+    /* Açılışta LED 2 saniye sürekli yanar. */
+    ret = gpio_pin_set_dt(
+        &startup_led,
+        1
+    );
+
+    if (ret < 0) {
+        return ret;
+    }
+
     k_work_schedule(
         &startup_led_off_work,
         K_MSEC(2000)
@@ -203,7 +148,6 @@ static int startup_led_init(void)
 
     return 0;
 }
-
 
 SYS_INIT(
     startup_led_init,
