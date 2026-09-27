@@ -1,4 +1,7 @@
 #include <zephyr/kernel.h>
+#include <zephyr/device.h>
+#include <zephyr/devicetree.h>
+#include <zephyr/drivers/gpio.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/gatt.h>
@@ -8,13 +11,11 @@
 
 #include <zmk/ble.h>
 
-
 #if defined(CONFIG_ZMK_BLE)
 
-
-/* =========================================================
- * MUSTAFA SERVICE UUID
- * ========================================================= */
+/* ============================================================
+ * MUSTAFA KEYBOARD SERVICE
+ * ============================================================ */
 
 #define BT_UUID_MUSTAFA_SERVICE_VAL \
     BT_UUID_128_ENCODE( \
@@ -26,14 +27,12 @@
     )
 
 #define BT_UUID_MUSTAFA_SERVICE \
-    BT_UUID_DECLARE_128( \
-        BT_UUID_MUSTAFA_SERVICE_VAL \
-    )
+    BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_SERVICE_VAL)
 
 
-/* =========================================================
- * MUSTAFA CONTROL UUID
- * ========================================================= */
+/* ============================================================
+ * CONTROL CHARACTERISTIC
+ * ============================================================ */
 
 #define BT_UUID_MUSTAFA_CONTROL_VAL \
     BT_UUID_128_ENCODE( \
@@ -45,33 +44,34 @@
     )
 
 #define BT_UUID_MUSTAFA_CONTROL \
-    BT_UUID_DECLARE_128( \
-        BT_UUID_MUSTAFA_CONTROL_VAL \
-    )
+    BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_CONTROL_VAL)
 
 
-/* =========================================================
- * LED
- * ========================================================= */
-
-extern void mustafa_led_set(bool on);
-
-
-/* =========================================================
- * GATT WRITE
+/* ============================================================
+ * ONBOARD LED
  *
- * Komutlar:
+ * ZMK nice!nano v2:
+ * P0.15 = blue_led
+ * ============================================================ */
+
+static const struct gpio_dt_spec blue_led =
+    GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
+
+
+/* ============================================================
+ * GATT WRITE CALLBACK
  *
- * 0x01              = LED AÇ
- * 0x02              = LED KAPAT
+ * Commands:
  *
- * 0x10 0x00         = Profil 1
- * 0x10 0x01         = Profil 2
- * 0x10 0x02         = Profil 3
- * 0x10 0x03         = Profil 4
- * 0x10 0x04         = Profil 5
+ * 0x01             LED ON
+ * 0x02             LED OFF
  *
- * ========================================================= */
+ * 0x10 0x00        Bluetooth Profile 1
+ * 0x10 0x01        Bluetooth Profile 2
+ * 0x10 0x02        Bluetooth Profile 3
+ * 0x10 0x03        Bluetooth Profile 4
+ * 0x10 0x04        Bluetooth Profile 5
+ * ============================================================ */
 
 static ssize_t control_write(
     struct bt_conn *conn,
@@ -79,82 +79,95 @@ static ssize_t control_write(
     const void *buf,
     uint16_t len,
     uint16_t offset,
-    uint8_t flags
-)
+    uint8_t flags)
 {
     const uint8_t *data = buf;
-
 
     ARG_UNUSED(conn);
     ARG_UNUSED(attr);
     ARG_UNUSED(flags);
 
-
+    /* Offset kontrolü */
     if (offset != 0) {
-        return BT_GATT_ERR(
-            BT_ATT_ERR_INVALID_OFFSET
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
+    }
+
+    /* Boş paket kontrolü */
+    if (len == 0) {
+        return BT_GATT_ERR(BT_ATT_ERR_INVALID_ATTRIBUTE_LEN);
+    }
+
+    printk(
+        "Mustafa Keyboard Control: %d byte\n",
+        len
+    );
+
+    for (uint16_t i = 0; i < len; i++) {
+        printk(
+            "DATA[%d] = 0x%02X\n",
+            i,
+            data[i]
         );
     }
 
 
-    if (len == 0) {
-        return 0;
-    }
-
-
-    printk(
-        "Mustafa Control: COMMAND = 0x%02X\n",
-        data[0]
-    );
-
-
-    /* =====================================================
-     * LED AÇ
-     * ===================================================== */
+    /* ========================================================
+     * LED ON
+     * ======================================================== */
 
     if (data[0] == 0x01) {
 
-        printk(
-            "Mustafa LED: ON\n"
-        );
+        if (device_is_ready(blue_led.port)) {
 
-        mustafa_led_set(true);
+            gpio_pin_set_dt(
+                &blue_led,
+                1
+            );
+
+            printk(
+                "Mustafa LED: ON\n"
+            );
+        }
 
         return len;
     }
 
 
-    /* =====================================================
-     * LED KAPAT
-     * ===================================================== */
+    /* ========================================================
+     * LED OFF
+     * ======================================================== */
 
     if (data[0] == 0x02) {
 
-        printk(
-            "Mustafa LED: OFF\n"
-        );
+        if (device_is_ready(blue_led.port)) {
 
-        mustafa_led_set(false);
+            gpio_pin_set_dt(
+                &blue_led,
+                0
+            );
+
+            printk(
+                "Mustafa LED: OFF\n"
+            );
+        }
 
         return len;
     }
 
 
-    /* =====================================================
-     * BLUETOOTH PROFİL
+    /* ========================================================
+     * BLUETOOTH PROFILE
      *
-     * Beklenen veri:
-     *
-     * [0] = 0x10
-     * [1] = 0..4
-     * ===================================================== */
+     * data[0] = 0x10
+     * data[1] = profile 0-4
+     * ======================================================== */
 
     if (data[0] == 0x10) {
 
         if (len < 2) {
 
             printk(
-                "Mustafa BT: Eksik profil komutu\n"
+                "Bluetooth profile command requires 2 bytes\n"
             );
 
             return BT_GATT_ERR(
@@ -162,14 +175,14 @@ static ssize_t control_write(
             );
         }
 
-
         uint8_t profile = data[1];
 
 
+        /* Sadece 0-4 geçerli */
         if (profile > 4) {
 
             printk(
-                "Mustafa BT: Gecersiz profil %d\n",
+                "Invalid Bluetooth profile: %d\n",
                 profile
             );
 
@@ -180,19 +193,20 @@ static ssize_t control_write(
 
 
         printk(
-            "Mustafa BT: Profil %d seciliyor\n",
-            profile + 1
+            "Selecting Bluetooth profile: %d\n",
+            profile
         );
 
 
-        int ret =
-            zmk_ble_prof_select(profile);
+        int ret = zmk_ble_prof_select(
+            profile
+        );
 
 
         if (ret < 0) {
 
             printk(
-                "Mustafa BT: Profil secme hatasi %d\n",
+                "Bluetooth profile selection failed: %d\n",
                 ret
             );
 
@@ -203,33 +217,30 @@ static ssize_t control_write(
 
 
         printk(
-            "Mustafa BT: Profil %d secildi\n",
-            profile + 1
+            "Bluetooth profile selected: %d\n",
+            profile
         );
-
 
         return len;
     }
 
 
-    /* =====================================================
-     * BİLİNMEYEN KOMUT
-     * ===================================================== */
+    /* ========================================================
+     * UNKNOWN COMMAND
+     * ======================================================== */
 
     printk(
-        "Mustafa Control: "
-        "UNKNOWN COMMAND 0x%02X\n",
+        "Unknown command: 0x%02X\n",
         data[0]
     );
-
 
     return len;
 }
 
 
-/* =========================================================
+/* ============================================================
  * GATT SERVICE
- * ========================================================= */
+ * ============================================================ */
 
 BT_GATT_SERVICE_DEFINE(
     mustafa_control_service,
@@ -247,12 +258,57 @@ BT_GATT_SERVICE_DEFINE(
         BT_GATT_PERM_WRITE,
 
         NULL,
-
         control_write,
-
         NULL
     )
 );
 
+
+/* ============================================================
+ * INITIALIZE LED GPIO
+ * ============================================================ */
+
+static int mustafa_control_init(void)
+{
+    if (!device_is_ready(blue_led.port)) {
+
+        printk(
+            "Mustafa LED GPIO not ready\n"
+        );
+
+        return -ENODEV;
+    }
+
+
+    int ret = gpio_pin_configure_dt(
+        &blue_led,
+        GPIO_OUTPUT_INACTIVE
+    );
+
+
+    if (ret < 0) {
+
+        printk(
+            "Failed to configure Mustafa LED: %d\n",
+            ret
+        );
+
+        return ret;
+    }
+
+
+    printk(
+        "Mustafa Control Service initialized\n"
+    );
+
+    return 0;
+}
+
+
+SYS_INIT(
+    mustafa_control_init,
+    APPLICATION,
+    90
+);
 
 #endif /* CONFIG_ZMK_BLE */
