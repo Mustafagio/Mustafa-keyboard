@@ -29,6 +29,13 @@ static struct k_work_delayable auto_off_work;
 
 static bool shutdown_warning_active = false;
 
+/*
+ * Auto-Off timer'ın biteceği zaman.
+ *
+ * 0 = aktif bir Auto-Off timer yok.
+ */
+static int64_t auto_off_deadline_ms = 0;
+
 /* =========================================================
  * SETTINGS
  *
@@ -37,12 +44,13 @@ static bool shutdown_warning_active = false;
  * mustafa/auto_off
  *
  * Değer:
+ *
  * 0       = Kapalı
- * 2000    = 2 saniye
- * 5000    = 5 saniye
- * 10000   = 10 saniye
- * 15000   = 15 saniye
- * 20000   = 20 saniye
+ * 120000  = 2 dakika
+ * 300000  = 5 dakika
+ * 600000  = 10 dakika
+ * 900000  = 15 dakika
+ * 1200000 = 20 dakika
  * ========================================================= */
 
 static int auto_off_settings_set(
@@ -98,6 +106,10 @@ static int auto_off_settings_commit(void)
             &auto_off_work,
             K_MSEC(auto_off_timeout_ms)
         );
+
+        auto_off_deadline_ms =
+            k_uptime_get() +
+            auto_off_timeout_ms;
     }
 
     return 0;
@@ -121,11 +133,13 @@ static void auto_off_soft_off_complete(void)
     if (auto_off_timeout_ms == 0) {
 
         shutdown_warning_active = false;
+        auto_off_deadline_ms = 0;
 
         return;
     }
 
     shutdown_warning_active = false;
+    auto_off_deadline_ms = 0;
 
     printk(
         "Mustafa Auto-Off: Soft Off\n"
@@ -148,10 +162,16 @@ static void auto_off_work_handler(
     ARG_UNUSED(work);
 
     if (auto_off_timeout_ms == 0) {
+        auto_off_deadline_ms = 0;
         return;
     }
 
     shutdown_warning_active = true;
+
+    /*
+     * Warning başladığında normal Auto-Off süresi dolmuştur.
+     */
+    auto_off_deadline_ms = 0;
 
     printk(
         "Mustafa Auto-Off: 2 second warning\n"
@@ -174,6 +194,8 @@ static void auto_off_reset_timer(void)
             &auto_off_work
         );
 
+        auto_off_deadline_ms = 0;
+
         return;
     }
 
@@ -181,6 +203,56 @@ static void auto_off_reset_timer(void)
         &auto_off_work,
         K_MSEC(auto_off_timeout_ms)
     );
+
+    /*
+     * Yeni Auto-Off deadline.
+     */
+    auto_off_deadline_ms =
+        k_uptime_get() +
+        auto_off_timeout_ms;
+}
+
+/* =========================================================
+ * KALAN SÜRE
+ *
+ * Return:
+ *
+ * 0      = timer aktif değil / süre dolmuş
+ * > 0    = kalan süre (ms)
+ * ========================================================= */
+
+uint32_t mustafa_auto_off_remaining_ms(void)
+{
+    int64_t now;
+    int64_t remaining;
+
+    if (auto_off_timeout_ms == 0) {
+        return 0;
+    }
+
+    if (shutdown_warning_active) {
+        return 0;
+    }
+
+    if (auto_off_deadline_ms == 0) {
+        return 0;
+    }
+
+    now = k_uptime_get();
+
+    remaining =
+        auto_off_deadline_ms -
+        now;
+
+    if (remaining <= 0) {
+        return 0;
+    }
+
+    if (remaining > UINT32_MAX) {
+        return UINT32_MAX;
+    }
+
+    return (uint32_t)remaining;
 }
 
 /* =========================================================
@@ -284,6 +356,8 @@ void mustafa_auto_off_set(
     }
 
     if (auto_off_timeout_ms == 0) {
+
+        auto_off_deadline_ms = 0;
 
         printk(
             "Mustafa Auto-Off: OFF\n"
