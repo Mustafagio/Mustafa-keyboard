@@ -1,6 +1,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
+#include <zephyr/settings/settings.h>
 
 #include <zmk/event_manager.h>
 #include <zmk/events/position_state_changed.h>
@@ -27,6 +28,89 @@ static uint32_t auto_off_timeout_ms = 0;
 static struct k_work_delayable auto_off_work;
 
 static bool shutdown_warning_active = false;
+
+/* =========================================================
+ * SETTINGS
+ *
+ * Kalıcı ayar:
+ *
+ * mustafa/auto_off
+ *
+ * Değer:
+ * 0       = Kapalı
+ * 2000    = 2 saniye
+ * 5000    = 5 saniye
+ * 10000   = 10 saniye
+ * 15000   = 15 saniye
+ * 20000   = 20 saniye
+ * ========================================================= */
+
+static int auto_off_settings_set(
+    const char *key,
+    size_t len,
+    settings_read_cb read_cb,
+    void *cb_arg
+)
+{
+    int rc;
+
+    if (settings_name_steq(
+            key,
+            "auto_off",
+            NULL
+        )) {
+
+        if (len != sizeof(auto_off_timeout_ms)) {
+            return -EINVAL;
+        }
+
+        rc = read_cb(
+            cb_arg,
+            &auto_off_timeout_ms,
+            sizeof(auto_off_timeout_ms)
+        );
+
+        if (rc >= 0) {
+            printk(
+                "Mustafa Auto-Off: Settings loaded: %u ms\n",
+                auto_off_timeout_ms
+            );
+
+            return 0;
+        }
+
+        return rc;
+    }
+
+    return -ENOENT;
+}
+
+static int auto_off_settings_commit(void)
+{
+    printk(
+        "Mustafa Auto-Off: Settings commit: %u ms\n",
+        auto_off_timeout_ms
+    );
+
+    if (auto_off_timeout_ms != 0) {
+
+        k_work_reschedule(
+            &auto_off_work,
+            K_MSEC(auto_off_timeout_ms)
+        );
+    }
+
+    return 0;
+}
+
+SETTINGS_STATIC_HANDLER_DEFINE(
+    mustafa_auto_off,
+    "mustafa",
+    NULL,
+    auto_off_settings_set,
+    auto_off_settings_commit,
+    NULL
+);
 
 /* =========================================================
  * LED UYARISI BİTTİ
@@ -151,9 +235,14 @@ void mustafa_auto_off_set(
     uint32_t timeout_ms
 )
 {
+    int rc;
+
     auto_off_timeout_ms =
         timeout_ms;
 
+    /*
+     * Önce mevcut timer'ı durdur.
+     */
     k_work_cancel_delayable(
         &auto_off_work
     );
@@ -161,6 +250,33 @@ void mustafa_auto_off_set(
     shutdown_warning_active = false;
 
     mustafa_shutdown_warning_cancel();
+
+    /*
+     * Ayarı FLASH SETTINGS'e kaydet.
+     *
+     * Böylece Soft Off / yeniden başlatma sonrasında
+     * değer kaybolmaz.
+     */
+    rc = settings_save_one(
+        "mustafa/auto_off",
+        &auto_off_timeout_ms,
+        sizeof(auto_off_timeout_ms)
+    );
+
+    if (rc != 0) {
+
+        printk(
+            "Mustafa Auto-Off: Settings save FAILED: %d\n",
+            rc
+        );
+
+    } else {
+
+        printk(
+            "Mustafa Auto-Off: Settings saved: %u ms\n",
+            auto_off_timeout_ms
+        );
+    }
 
     if (auto_off_timeout_ms == 0) {
 
