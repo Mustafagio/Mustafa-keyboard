@@ -3,16 +3,26 @@
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/devicetree.h>
 
-#include <zmk/pm.h>
+/* =========================================================
+ * MUSTAFA KEYBOARD - STARTUP / SHUTDOWN LED
+ *
+ * Bu dosyanın görevi:
+ * 1) Açılışta LED'i 2 saniye yakmak.
+ * 2) Auto-Off başlamadan önce LED'i 2 saniye hızlı
+ *    şekilde yanıp söndürmek.
+ * 3) Uyarı tamamlandığında auto_off.c içindeki callback'i
+ *    çağırmak.
+ *
+ * Soft Off işlemi BU DOSYADA YAPILMAZ.
+ * Soft Off işlemini auto_off.c gerçekleştirir.
+ * ========================================================= */
 
 static const struct gpio_dt_spec startup_led =
     GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
-/* ---------------------------------------------------------
+/* =========================================================
  * AÇILIŞ LED'İ
- *
- * Kart açıldığında LED 2 saniye sürekli yanar.
- * --------------------------------------------------------- */
+ * ========================================================= */
 
 static struct k_work_delayable startup_led_off_work;
 
@@ -23,36 +33,44 @@ static void startup_led_off(struct k_work *work)
     gpio_pin_set_dt(&startup_led, 0);
 }
 
-/* ---------------------------------------------------------
- * OTOMATİK KAPANMA LED ANİMASYONU
+/* =========================================================
+ * AUTO-OFF UYARI LED'İ
  *
- * 2 saniye boyunca 100 ms ON / 100 ms OFF.
- * Animasyon tamamlanınca Soft Off yapılır.
- * --------------------------------------------------------- */
+ * 2 saniye boyunca:
+ * 100 ms ON / 100 ms OFF
+ * Toplam 20 toggle
+ * ========================================================= */
 
 static struct k_work_delayable shutdown_led_work;
-static int shutdown_blink_count;
-static bool shutdown_sequence_active;
+
+static int shutdown_blink_count = 0;
+
+static void (*shutdown_complete_callback)(void) = NULL;
 
 static void shutdown_led_blink(struct k_work *work)
 {
     ARG_UNUSED(work);
 
-    if (!shutdown_sequence_active) {
-        gpio_pin_set_dt(&startup_led, 0);
-        return;
-    }
-
+    /*
+     * 20 toggle tamamlandıktan sonra LED'i kapat ve
+     * auto_off.c tarafından verilen callback'i çalıştır.
+     */
     if (shutdown_blink_count >= 20) {
-        gpio_pin_set_dt(&startup_led, 0);
-        shutdown_sequence_active = false;
+        void (*callback)(void) = shutdown_complete_callback;
 
-        /* LED uyarısı tamamlandı; şimdi gerçek Soft Off. */
-        zmk_pm_soft_off();
+        shutdown_complete_callback = NULL;
+
+        gpio_pin_set_dt(&startup_led, 0);
+
+        if (callback != NULL) {
+            callback();
+        }
+
         return;
     }
 
     gpio_pin_toggle_dt(&startup_led);
+
     shutdown_blink_count++;
 
     k_work_schedule(
@@ -61,23 +79,25 @@ static void shutdown_led_blink(struct k_work *work)
     );
 }
 
-/* ---------------------------------------------------------
- * AUTO-OFF MODÜLÜ TARAFINDAN ÇAĞRILIR
- * --------------------------------------------------------- */
+/* =========================================================
+ * AUTO-OFF UYARISINI BAŞLAT
+ *
+ * callback = 2 saniyelik LED uyarısı bittiğinde çağrılacak
+ *           fonksiyon.
+ * ========================================================= */
 
-void mustafa_start_shutdown_sequence(void)
+void mustafa_shutdown_warning_start(
+    void (*callback)(void)
+)
 {
     if (!device_is_ready(startup_led.port)) {
-        /* LED kullanılamıyorsa Soft Off'u bekletme. */
-        zmk_pm_soft_off();
         return;
     }
 
-    k_work_cancel_delayable(&startup_led_off_work);
     k_work_cancel_delayable(&shutdown_led_work);
 
     shutdown_blink_count = 0;
-    shutdown_sequence_active = true;
+    shutdown_complete_callback = callback;
 
     gpio_pin_set_dt(&startup_led, 0);
 
@@ -87,22 +107,27 @@ void mustafa_start_shutdown_sequence(void)
     );
 }
 
-/*
- * Uyarı animasyonu sırasında tuşa basılırsa Auto-Off tarafı bunu
- * çağırarak kapanış animasyonunu iptal eder.
- */
-void mustafa_cancel_shutdown_sequence(void)
-{
-    shutdown_sequence_active = false;
-    shutdown_blink_count = 0;
+/* =========================================================
+ * AUTO-OFF UYARISINI İPTAL ET
+ *
+ * Kullanıcı uyarı sırasında bir tuşa basarsa çağrılır.
+ * ========================================================= */
 
+void mustafa_shutdown_warning_cancel(void)
+{
     k_work_cancel_delayable(&shutdown_led_work);
-    gpio_pin_set_dt(&startup_led, 0);
+
+    shutdown_blink_count = 0;
+    shutdown_complete_callback = NULL;
+
+    if (device_is_ready(startup_led.port)) {
+        gpio_pin_set_dt(&startup_led, 0);
+    }
 }
 
-/* ---------------------------------------------------------
+/* =========================================================
  * STARTUP LED INIT
- * --------------------------------------------------------- */
+ * ========================================================= */
 
 static int startup_led_init(void)
 {
@@ -121,6 +146,15 @@ static int startup_led_init(void)
         return ret;
     }
 
+    ret = gpio_pin_set_dt(
+        &startup_led,
+        1
+    );
+
+    if (ret < 0) {
+        return ret;
+    }
+
     k_work_init_delayable(
         &startup_led_off_work,
         startup_led_off
@@ -131,16 +165,7 @@ static int startup_led_init(void)
         shutdown_led_blink
     );
 
-    /* Açılışta LED 2 saniye sürekli yanar. */
-    ret = gpio_pin_set_dt(
-        &startup_led,
-        1
-    );
-
-    if (ret < 0) {
-        return ret;
-    }
-
+    /* Açılış LED'i 2 saniye yanar. */
     k_work_schedule(
         &startup_led_off_work,
         K_MSEC(2000)
