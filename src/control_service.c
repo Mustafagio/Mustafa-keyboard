@@ -37,28 +37,21 @@
 
 
 /* ============================================================
- * ONBOARD LED - P0.15
- * nice!nano / Robiz nRF52840 Pro Micro
+ * ONBOARD LED
+ * P0.15
  * ============================================================ */
 
 static const struct gpio_dt_spec blue_led =
     GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
 
-/* LED'i 1 saniye sonra kapatmak için work */
-static struct k_work_delayable led_off_work;
-
-
-static void led_off_work_handler(struct k_work *work)
-{
-    ARG_UNUSED(work);
-
-    gpio_pin_set_dt(&blue_led, 0);
-}
-
-
 /* ============================================================
  * GATT WRITE
+ *
+ * Komutlar:
+ *
+ * 0x01 = LED AÇ
+ * 0x02 = LED KAPAT
  * ============================================================ */
 
 static ssize_t control_write(
@@ -79,36 +72,54 @@ static ssize_t control_write(
         return BT_GATT_ERR(BT_ATT_ERR_INVALID_OFFSET);
     }
 
-    printk("Mustafa Keyboard Control: %d byte\n", len);
+    if (len == 0) {
+        return 0;
+    }
 
-    for (uint16_t i = 0; i < len; i++) {
-        printk("DATA[%d] = 0x%02X\n", i, data[i]);
+    printk(
+        "Mustafa Control: COMMAND = 0x%02X\n",
+        data[0]
+    );
+
+
+    /* ========================================================
+     * LED AÇ
+     * ======================================================== */
+
+    if (data[0] == 0x01) {
+
+        printk("Mustafa LED: ON\n");
+
+        if (device_is_ready(blue_led.port)) {
+            gpio_pin_set_dt(&blue_led, 1);
+        }
     }
 
 
     /* ========================================================
-     * TEST KOMUTU
-     *
-     * PC'den:
-     *
-     * 0xAA
-     *
-     * gelirse LED'i 1 saniye yak.
+     * LED KAPAT
      * ======================================================== */
 
-    if (len >= 1 && data[0] == 0xAA) {
+    else if (data[0] == 0x02) {
 
-        printk("MUSTAFA TEST: 0xAA ALINDI!\n");
+        printk("Mustafa LED: OFF\n");
 
         if (device_is_ready(blue_led.port)) {
-
-            gpio_pin_set_dt(&blue_led, 1);
-
-            k_work_reschedule(
-                &led_off_work,
-                K_SECONDS(1)
-            );
+            gpio_pin_set_dt(&blue_led, 0);
         }
+    }
+
+
+    /* ========================================================
+     * BILINMEYEN KOMUT
+     * ======================================================== */
+
+    else {
+
+        printk(
+            "Mustafa Control: UNKNOWN COMMAND 0x%02X\n",
+            data[0]
+        );
     }
 
 
@@ -146,7 +157,10 @@ BT_GATT_SERVICE_DEFINE(
 static int mustafa_control_init(void)
 {
     if (!device_is_ready(blue_led.port)) {
-        printk("Mustafa LED: GPIO hazir degil!\n");
+        printk(
+            "Mustafa LED: GPIO hazir degil!\n"
+        );
+
         return -ENODEV;
     }
 
@@ -155,15 +169,13 @@ static int mustafa_control_init(void)
         GPIO_OUTPUT_INACTIVE
     );
 
-    k_work_init_delayable(
-        &led_off_work,
-        led_off_work_handler
+    printk(
+        "Mustafa Control Service hazir.\n"
     );
-
-    printk("Mustafa Control Service hazir.\n");
 
     return 0;
 }
+
 
 SYS_INIT(
     mustafa_control_init,
