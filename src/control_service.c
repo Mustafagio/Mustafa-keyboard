@@ -60,14 +60,7 @@ extern uint32_t mustafa_auto_off_remaining_ms(void);
  * ========================================================= */
 
 static const struct gpio_dt_spec blue_led =
-    GPIO_DT_SPEC_GET(
-        DT_NODELABEL(blue_led),
-        gpios
-    );
-
-/* =========================================================
- * FUNCTION DECLARATIONS
- * ========================================================= */
+    GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
 static void notify_active_profile(
     uint8_t profile
@@ -82,98 +75,6 @@ static void notify_auto_off_remaining(
 );
 
 /* =========================================================
- * AUTO-OFF STATUS WORK
- *
- * Her saniye Auto-Off kalan süresini WPF'ye gönderir.
- * ========================================================= */
-
-static struct k_work_delayable auto_off_status_work;
-
-/* =========================================================
- * AUTO-OFF STATUS WORK HANDLER
- * ========================================================= */
-
-static void auto_off_status_work_handler(
-    struct k_work *work
-)
-{
-    ARG_UNUSED(work);
-
-    uint32_t remaining_ms =
-        mustafa_auto_off_remaining_ms();
-
-    /* ---------------------------------------------------------
-     * Auto-Off kapalıysa veya süre bittiyse çalışmayı durdur.
-     * --------------------------------------------------------- */
-
-    if (remaining_ms == 0) {
-
-        printk(
-            "Mustafa Auto-Off status: 0 ms\n"
-        );
-
-        return;
-    }
-
-    /* ---------------------------------------------------------
-     * Kalan süreyi WPF'ye gönder.
-     * --------------------------------------------------------- */
-
-    notify_auto_off_remaining(
-        remaining_ms
-    );
-
-    printk(
-        "Mustafa Auto-Off status: %u ms\n",
-        remaining_ms
-    );
-
-    /* ---------------------------------------------------------
-     * 1 saniye sonra tekrar gönder.
-     * --------------------------------------------------------- */
-
-    k_work_schedule(
-        &auto_off_status_work,
-        K_SECONDS(1)
-    );
-}
-
-/* =========================================================
- * AUTO-OFF STATUS START
- * ========================================================= */
-
-static void start_auto_off_status_work(void)
-{
-    k_work_cancel_delayable(
-        &auto_off_status_work
-    );
-
-    k_work_schedule(
-        &auto_off_status_work,
-        K_NO_WAIT
-    );
-
-    printk(
-        "Mustafa Auto-Off status notifications started\n"
-    );
-}
-
-/* =========================================================
- * AUTO-OFF STATUS STOP
- * ========================================================= */
-
-static void stop_auto_off_status_work(void)
-{
-    k_work_cancel_delayable(
-        &auto_off_status_work
-    );
-
-    printk(
-        "Mustafa Auto-Off status notifications stopped\n"
-    );
-}
-
-/* =========================================================
  * CONTROL WRITE
  * ========================================================= */
 
@@ -183,8 +84,7 @@ static ssize_t control_write(
     const void *buf,
     uint16_t len,
     uint16_t offset,
-    uint8_t flags
-)
+    uint8_t flags)
 {
     const uint8_t *data = buf;
 
@@ -210,7 +110,6 @@ static ssize_t control_write(
     );
 
     for (uint16_t i = 0; i < len; i++) {
-
         printk(
             "DATA[%d] = 0x%02X\n",
             i,
@@ -272,8 +171,7 @@ static ssize_t control_write(
             );
         }
 
-        uint8_t profile =
-            data[1];
+        uint8_t profile = data[1];
 
         if (profile > 4) {
             return BT_GATT_ERR(
@@ -282,9 +180,7 @@ static ssize_t control_write(
         }
 
         int ret =
-            zmk_ble_prof_select(
-                profile
-            );
+            zmk_ble_prof_select(profile);
 
         if (ret < 0) {
             return BT_GATT_ERR(
@@ -342,8 +238,7 @@ static ssize_t control_write(
         uint32_t timeout_ms =
             mustafa_auto_off_get();
 
-        uint8_t setting =
-            0x00;
+        uint8_t setting = 0x00;
 
         switch (timeout_ms) {
 
@@ -386,21 +281,6 @@ static ssize_t control_write(
             setting
         );
 
-        /* -----------------------------------------------------
-         * Mevcut Auto-Off açıksa kalan süre bildirimlerini başlat.
-         * ----------------------------------------------------- */
-
-        if (setting != 0x00) {
-
-            start_auto_off_status_work();
-
-        }
-        else {
-
-            stop_auto_off_status_work();
-
-        }
-
         return len;
     }
 
@@ -415,6 +295,12 @@ static ssize_t control_write(
      *
      * Değer:
      *   kalan süre (ms)
+     *
+     * Örnek:
+     *   5 dakika ayarlı
+     *   4 dakika 37 saniye kaldı
+     *
+     *   0x32 + 277000
      * ===================================================== */
 
     if (data[0] == 0x32) {
@@ -427,7 +313,7 @@ static ssize_t control_write(
         );
 
         printk(
-            "Mustafa Auto-Off remaining request: %u ms\n",
+            "Mustafa Auto-Off remaining: %u ms\n",
             remaining_ms
         );
 
@@ -453,11 +339,9 @@ static ssize_t control_write(
             );
         }
 
-        uint8_t setting =
-            data[1];
+        uint8_t setting = data[1];
 
-        uint32_t timeout_ms =
-            0;
+        uint32_t timeout_ms = 0;
 
         switch (setting) {
 
@@ -500,22 +384,6 @@ static ssize_t control_write(
             setting,
             timeout_ms
         );
-
-        /* -----------------------------------------------------
-         * Yeni Auto-Off ayarına göre status bildirimini başlat/
-         * durdur.
-         * ----------------------------------------------------- */
-
-        if (timeout_ms == 0) {
-
-            stop_auto_off_status_work();
-
-        }
-        else {
-
-            start_auto_off_status_work();
-
-        }
 
         return len;
     }
@@ -639,22 +507,10 @@ static void notify_auto_off_remaining(
     uint8_t data[5] =
     {
         0x32,
-
-        (uint8_t)(
-            remaining_ms & 0xFF
-        ),
-
-        (uint8_t)(
-            (remaining_ms >> 8) & 0xFF
-        ),
-
-        (uint8_t)(
-            (remaining_ms >> 16) & 0xFF
-        ),
-
-        (uint8_t)(
-            (remaining_ms >> 24) & 0xFF
-        )
+        (uint8_t)(remaining_ms & 0xFF),
+        (uint8_t)((remaining_ms >> 8) & 0xFF),
+        (uint8_t)((remaining_ms >> 16) & 0xFF),
+        (uint8_t)((remaining_ms >> 24) & 0xFF)
     };
 
     int ret =
@@ -719,15 +575,6 @@ static int mustafa_control_init(void)
     if (!device_is_ready(blue_led.port)) {
         return -ENODEV;
     }
-
-    /* ---------------------------------------------------------
-     * Auto-Off status work'ü burada hazırlıyoruz.
-     * --------------------------------------------------------- */
-
-    k_work_init_delayable(
-        &auto_off_status_work,
-        auto_off_status_work_handler
-    );
 
     /*
      * ÖNEMLİ:
