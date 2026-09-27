@@ -145,10 +145,19 @@ static ssize_t control_write(
      * 0x30 = Auto-Off
      *
      * 30 00 = OFF
-     * 30 02 = 2 seconds
-     * 30 10 = 10 seconds
-     * 30 15 = 15 seconds
-     * 30 20 = 20 seconds
+     * Saniye:
+     * 30 02 = 2 saniye
+     * 30 05 = 5 saniye
+     * 30 0A = 10 saniye
+     * 30 0F = 15 saniye
+     * 30 14 = 20 saniye
+     *
+     * Dakika (0x80 biti):
+     * 30 82 = 2 dakika
+     * 30 85 = 5 dakika
+     * 30 8A = 10 dakika
+     * 30 8F = 15 dakika
+     * 30 94 = 20 dakika
      * ------------------------------------------------------------ */
     if (data[0] == 0x30) {
         if (len < 2) {
@@ -163,20 +172,46 @@ static ssize_t control_write(
             timeout_ms = 0;
             break;
 
+        /* Saniye */
         case 0x02:
-            timeout_ms = 2000;
+            timeout_ms = 2U * 1000U;
             break;
 
-        case 0x10:
-            timeout_ms = 10000;
+        case 0x05:
+            timeout_ms = 5U * 1000U;
             break;
 
-        case 0x15:
-            timeout_ms = 15000;
+        case 0x0A:
+            timeout_ms = 10U * 1000U;
             break;
 
-        case 0x20:
-            timeout_ms = 20000;
+        case 0x0F:
+            timeout_ms = 15U * 1000U;
+            break;
+
+        case 0x14:
+            timeout_ms = 20U * 1000U;
+            break;
+
+        /* Dakika: 0x80 biti süre birimini dakika yapar. */
+        case 0x82:
+            timeout_ms = 2U * 60U * 1000U;
+            break;
+
+        case 0x85:
+            timeout_ms = 5U * 60U * 1000U;
+            break;
+
+        case 0x8A:
+            timeout_ms = 10U * 60U * 1000U;
+            break;
+
+        case 0x8F:
+            timeout_ms = 15U * 60U * 1000U;
+            break;
+
+        case 0x94:
+            timeout_ms = 20U * 60U * 1000U;
             break;
 
         default:
@@ -284,15 +319,8 @@ static int mustafa_control_init(void)
         return -ENODEV;
     }
 
-    int ret = gpio_pin_configure_dt(
-        &blue_led,
-        GPIO_OUTPUT_INACTIVE
-    );
-
-    if (ret < 0) {
-        return ret;
-    }
-
+    /* LED GPIO'sunu startup_led.c yapılandırır. Burada tekrar
+     * configure etmiyoruz; aksi halde açılış LED'i söndürülebilir. */
     printk(
         "Mustafa Control Service initialized\n"
     );
