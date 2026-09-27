@@ -43,10 +43,15 @@
 #define BT_UUID_MUSTAFA_CONTROL \
     BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_CONTROL_VAL)
 
-/* auto_off.c içindeki fonksiyon */
+/* =========================================================
+ * AUTO-OFF API
+ * ========================================================= */
+
 extern void mustafa_auto_off_set(
     uint32_t timeout_ms
 );
+
+extern uint32_t mustafa_auto_off_get(void);
 
 /* =========================================================
  * BLUE LED
@@ -57,6 +62,10 @@ static const struct gpio_dt_spec blue_led =
 
 static void notify_active_profile(
     uint8_t profile
+);
+
+static void notify_auto_off(
+    uint8_t setting
 );
 
 /* =========================================================
@@ -204,14 +213,80 @@ static ssize_t control_write(
     }
 
     /* =====================================================
+     * 0x31 = AUTO-OFF CURRENT SETTING REQUEST
+     *
+     * WPF:
+     *   0x31
+     *
+     * Firmware:
+     *   0x31 0x00 = Kapalı
+     *   0x31 0x02 = 2 dakika
+     *   0x31 0x05 = 5 dakika
+     *   0x31 0x0A = 10 dakika
+     *   0x31 0x0F = 15 dakika
+     *   0x31 0x14 = 20 dakika
+     * ===================================================== */
+
+    if (data[0] == 0x31) {
+
+        uint32_t timeout_ms =
+            mustafa_auto_off_get();
+
+        uint8_t setting = 0x00;
+
+        switch (timeout_ms) {
+
+        case 0:
+            setting = 0x00;
+            break;
+
+        case 120000:
+            setting = 0x02;
+            break;
+
+        case 300000:
+            setting = 0x05;
+            break;
+
+        case 600000:
+            setting = 0x0A;
+            break;
+
+        case 900000:
+            setting = 0x0F;
+            break;
+
+        case 1200000:
+            setting = 0x14;
+            break;
+
+        default:
+            return BT_GATT_ERR(
+                BT_ATT_ERR_VALUE_NOT_ALLOWED
+            );
+        }
+
+        notify_auto_off(
+            setting
+        );
+
+        printk(
+            "Mustafa Auto-Off read: 0x%02X\n",
+            setting
+        );
+
+        return len;
+    }
+
+    /* =====================================================
      * 0x30 = AUTO-OFF
      *
      * 0x30 0x00 = KAPALI
-     * 0x30 0x02 = 2 saniye
-     * 0x30 0x05 = 5 saniye
-     * 0x30 0x0A = 10 saniye
-     * 0x30 0x0F = 15 saniye
-     * 0x30 0x14 = 20 saniye
+     * 0x30 0x02 = 2 dakika
+     * 0x30 0x05 = 5 dakika
+     * 0x30 0x0A = 10 dakika
+     * 0x30 0x0F = 15 dakika
+     * 0x30 0x14 = 20 dakika
      * ===================================================== */
 
     if (data[0] == 0x30) {
@@ -333,6 +408,37 @@ static void notify_active_profile(
 
         printk(
             "Profile notify failed: %d\n",
+            ret
+        );
+    }
+}
+
+/* =========================================================
+ * AUTO-OFF NOTIFY
+ * ========================================================= */
+
+static void notify_auto_off(
+    uint8_t setting
+)
+{
+    uint8_t data[2] =
+    {
+        0x31,
+        setting
+    };
+
+    int ret =
+        bt_gatt_notify(
+            NULL,
+            &mustafa_control_service.attrs[2],
+            data,
+            sizeof(data)
+        );
+
+    if (ret < 0) {
+
+        printk(
+            "Auto-Off notify failed: %d\n",
             ret
         );
     }

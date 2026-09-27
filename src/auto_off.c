@@ -231,6 +231,11 @@ ZMK_SUBSCRIPTION(
  * WPF AUTO-OFF AYARI
  * ========================================================= */
 
+uint32_t mustafa_auto_off_get(void)
+{
+    return auto_off_timeout_ms;
+}
+
 void mustafa_auto_off_set(
     uint32_t timeout_ms
 )
