@@ -4,6 +4,8 @@
 
 Bu proje PCB kullanılmadan, el kablolaması (hand-wiring) yöntemiyle geliştirilmiş özel yapım bir mekanik klavyedir.
 
+🇹🇷 **Türkçe** | 🇬🇧 [English](README.en.md)
+
 ## Özellikler
 
 - 64 mekanik switch
