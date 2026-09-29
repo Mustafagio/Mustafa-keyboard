@@ -401,8 +401,7 @@ static ssize_t control_write(
         zmk_ble_clear_bonds();
 
         printk(
-            "Bond clear: Profil %d temizleme tamamlandi
-",
+            "Bond clear: Profil %d temizleme tamamlandi\n",
             profile
         );
 
