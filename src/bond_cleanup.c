@@ -16,7 +16,7 @@
  * 4 = BT_SECURITY_ERR_AUTH_REQUIREMENT
  * 9 = BT_SECURITY_ERR_UNSPECIFIED
  *
- * Bu hatalar geldiğinde aktif profilin bond kaydını
+ * Bu hatalar geldiginde aktif profilin bond kaydini
  * ZMK'nin kendi bond temizleme API'si ile siliyoruz.
  * ========================================================= */
 
@@ -30,7 +30,7 @@
 
 static struct k_work_delayable bond_auto_clear_work;
 
-static volatile bool bond_auto_clear_pending = false;
+static bool bond_auto_clear_pending = false;
 
 static int bond_auto_clear_profile = -1;
 
@@ -53,7 +53,7 @@ static void bond_auto_clear_work_handler(
 
 
     /* -----------------------------------------------------
-     * O sırada aktif profil değişmişse işlem yapma.
+     * O sirada aktif profil degismisse islem yapma.
      * ----------------------------------------------------- */
 
     int active_profile =
@@ -93,7 +93,7 @@ static void bond_auto_clear_work_handler(
     /* -----------------------------------------------------
      * ZMK'nin kendi bond temizleme mekanizmasi.
      *
-     * Bu fonksiyon aktif profilin bond kaydini temizler.
+     * zmk_ble_clear_bonds() void doner.
      * ----------------------------------------------------- */
 
     printk(
@@ -162,7 +162,7 @@ static void bond_cleanup_pairing_failed(
 
 
     /* -----------------------------------------------------
-     * Sadece test ettigimiz iki security error icin
+     * Sadece 4 ve 9 numarali security error'larda
      * otomatik temizleme yap.
      *
      * 4 = AUTH_REQUIREMENT
@@ -217,7 +217,7 @@ static void bond_cleanup_pairing_failed(
 
     /* -----------------------------------------------------
      * Ayni anda birden fazla callback gelirse tekrar tekrar
-     * temizleme planlamayalim.
+     * temizleme planlama.
      * ----------------------------------------------------- */
 
     if (bond_auto_clear_pending) {
@@ -246,13 +246,11 @@ static void bond_cleanup_pairing_failed(
 
 
     /* -----------------------------------------------------
-     * Bluetooth callback'i icinde dogrudan temizleme yerine
-     * work queue kullaniyoruz.
+     * Bluetooth callback icinde dogrudan bond temizleme
+     * yapmak yerine work queue kullaniyoruz.
      *
-     * 500 ms bekleme:
-     * - security callback tamamlanir
-     * - baglanti durumunun oturmasina izin verilir
-     * - ardindan ZMK bond temizlenir.
+     * 500 ms gecikme:
+     * Security callback'in tamamlanmasina izin verir.
      * ----------------------------------------------------- */
 
     k_work_reschedule(
@@ -283,11 +281,15 @@ static struct bt_conn_auth_info_cb bond_cleanup_auth_cb = {
 
 static int bond_cleanup_init(void)
 {
+    /* Work item'i initialize et. */
+
     k_work_init_delayable(
         &bond_auto_clear_work,
         bond_auto_clear_work_handler
     );
 
+
+    /* Bluetooth authentication callback'i kaydet. */
 
     int ret =
         bt_conn_auth_info_cb_register(
@@ -315,10 +317,15 @@ static int bond_cleanup_init(void)
 }
 
 
+/* =========================================================
+ * SYSTEM INIT
+ * ========================================================= */
+
 SYS_INIT(
     bond_cleanup_init,
     APPLICATION,
-    95
+    90
 );
+
 
 #endif
