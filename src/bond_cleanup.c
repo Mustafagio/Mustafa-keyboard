@@ -17,21 +17,23 @@ static struct k_work_delayable bond_debug_work;
 static uint8_t blink_count;
 static uint8_t blink_state;
 
-/*
- * LED hata teşhisi
- *
- * 1 = PIN_OR_KEY_MISSING
- * 2 = KEY_REJECTED
- * 3 = AUTH_FAIL
- *
- * Diğer hata kodlarında:
- * 4 = OTHER
- *
- * Bu sürümde OTHER durumunda gerçek
- * enum değerini de printk ile yazdırıyoruz.
- */
 
-static void bond_debug_work_handler(struct k_work *work)
+/* =========================================================
+ * LED HATA KODU GÖSTERİMİ
+ *
+ * LED kaç kez yanıp sönerse Bluetooth security error
+ * reason değeri odur.
+ *
+ * Örnek:
+ *   reason = 4  -> 4 kez
+ *   reason = 5  -> 5 kez
+ *   reason = 10 -> 10 kez
+ *
+ * ========================================================= */
+
+static void bond_debug_work_handler(
+    struct k_work *work
+)
 {
     ARG_UNUSED(work);
 
@@ -40,46 +42,102 @@ static void bond_debug_work_handler(struct k_work *work)
     }
 
     if (blink_state == 0) {
-        gpio_pin_set_dt(&blue_led, 1);
+
+        gpio_pin_set_dt(
+            &blue_led,
+            1
+        );
+
         blink_state = 1;
 
         k_work_reschedule(
             &bond_debug_work,
-            K_MSEC(250)
+            K_MSEC(300)
         );
 
         return;
     }
 
-    gpio_pin_set_dt(&blue_led, 0);
+
+    gpio_pin_set_dt(
+        &blue_led,
+        0
+    );
+
     blink_state = 0;
+
 
     if (blink_count > 0) {
         blink_count--;
     }
 
+
     if (blink_count > 0) {
+
         k_work_reschedule(
             &bond_debug_work,
-            K_MSEC(250)
+            K_MSEC(300)
         );
+
+        return;
     }
+
+
+    /*
+     * Hata kodu gösterildikten sonra
+     * 2 saniye bekle.
+     *
+     * Böylece aynı hata tekrar geldiğinde
+     * LED dizisini ayırt etmek kolay olur.
+     */
+
+    k_work_reschedule(
+        &bond_debug_work,
+        K_MSEC(2000)
+    );
 }
 
-static void bond_debug_start(uint8_t count)
+
+static void bond_debug_start(
+    uint8_t count
+)
 {
     if (!device_is_ready(blue_led.port)) {
         return;
     }
 
+
+    /*
+     * Güvenlik:
+     *
+     * Çok büyük bir reason değeri gelirse
+     * LED'in dakikalarca yanıp sönmesini
+     * engelliyoruz.
+     */
+
+    if (count == 0) {
+        count = 1;
+    }
+
+    if (count > 20) {
+        count = 20;
+    }
+
+
     blink_count = count;
     blink_state = 0;
+
 
     k_work_reschedule(
         &bond_debug_work,
         K_MSEC(100)
     );
 }
+
+
+/* =========================================================
+ * PAIRING FAILED
+ * ========================================================= */
 
 static void bond_cleanup_pairing_failed(
     struct bt_conn *conn,
@@ -89,69 +147,38 @@ static void bond_cleanup_pairing_failed(
     struct bt_conn_info info;
     int err;
 
+
     printk(
-        "Bond cleanup: pairing_failed reason = %d\n",
+        "========================================\n"
+    );
+
+    printk(
+        "Bond cleanup: pairing_failed\n"
+    );
+
+    printk(
+        "Bond cleanup: SECURITY ERROR = %d\n",
         reason
     );
 
-    switch (reason) {
-
-    case BT_SECURITY_ERR_PIN_OR_KEY_MISSING:
-
-        printk(
-            "Bond cleanup: PIN_OR_KEY_MISSING\n"
-        );
-
-        bond_debug_start(1);
-
-        break;
-
-    case BT_SECURITY_ERR_KEY_REJECTED:
-
-        printk(
-            "Bond cleanup: KEY_REJECTED\n"
-        );
-
-        bond_debug_start(2);
-
-        break;
-
-    case BT_SECURITY_ERR_AUTH_FAIL:
-
-        printk(
-            "Bond cleanup: AUTH_FAIL\n"
-        );
-
-        bond_debug_start(3);
-
-        break;
-
-    default:
-
-        printk(
-            "Bond cleanup: OTHER SECURITY ERROR = %d\n",
-            reason
-        );
-
-        bond_debug_start(4);
-
-        break;
-    }
 
     /*
-     * Şimdilik hiçbir bond'u silmiyoruz.
-     *
-     * Önce gerçek hata kodunu kesin olarak
-     * tespit edeceğiz.
+     * GERÇEK HATA KODUNU LED İLE GÖSTER
      */
 
-    if (reason != BT_SECURITY_ERR_PIN_OR_KEY_MISSING &&
-        reason != BT_SECURITY_ERR_KEY_REJECTED) {
+    bond_debug_start(
+        (uint8_t)reason
+    );
 
-        return;
-    }
 
-    err = bt_conn_get_info(conn, &info);
+    /* =====================================================
+     * CONNECTION INFO
+     * ===================================================== */
+
+    err = bt_conn_get_info(
+        conn,
+        &info
+    );
 
     if (err) {
 
@@ -163,38 +190,58 @@ static void bond_cleanup_pairing_failed(
         return;
     }
 
+
     if (info.type != BT_CONN_TYPE_LE) {
+
+        printk(
+            "Bond cleanup: LE olmayan connection\n"
+        );
+
         return;
     }
 
-    printk(
-        "Bond cleanup: eski/gecersiz bond algilandi\n"
-    );
 
     /*
-     * Bu test sürümünde gerçek silme işlemi
-     * yapılmıyor.
+     * ŞİMDİLİK HİÇBİR BOND SİLİNMİYOR.
      *
-     * Sadece bilgi topluyoruz.
+     * Bu sürüm sadece gerçek security error
+     * kodunu tespit etmek için kullanılıyor.
      */
 
     printk(
-        "Bond cleanup: bond temizleme testi\n"
+        "Bond cleanup: test modu - bond silinmedi\n"
+    );
+
+    printk(
+        "========================================\n"
     );
 }
 
+
+/* =========================================================
+ * AUTH CALLBACK
+ * ========================================================= */
+
 static struct bt_conn_auth_info_cb bond_cleanup_auth_cb = {
-    .pairing_failed = bond_cleanup_pairing_failed,
+    .pairing_failed =
+        bond_cleanup_pairing_failed,
 };
+
+
+/* =========================================================
+ * INIT
+ * ========================================================= */
 
 static int mustafa_bond_cleanup_init(void)
 {
     int err;
 
+
     k_work_init_delayable(
         &bond_debug_work,
         bond_debug_work_handler
     );
+
 
     if (!device_is_ready(blue_led.port)) {
 
@@ -203,9 +250,12 @@ static int mustafa_bond_cleanup_init(void)
         );
     }
 
-    err = bt_conn_auth_info_cb_register(
-        &bond_cleanup_auth_cb
-    );
+
+    err =
+        bt_conn_auth_info_cb_register(
+            &bond_cleanup_auth_cb
+        );
+
 
     if (err) {
 
@@ -217,12 +267,19 @@ static int mustafa_bond_cleanup_init(void)
         return err;
     }
 
+
     printk(
-        "Bond cleanup: aktif\n"
+        "Bond cleanup: aktif - TEST MODU\n"
     );
+
 
     return 0;
 }
+
+
+/* =========================================================
+ * SYSTEM INIT
+ * ========================================================= */
 
 SYS_INIT(
     mustafa_bond_cleanup_init,
