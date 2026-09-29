@@ -7,15 +7,43 @@
 #include <zephyr/kernel.h>
 #include <zephyr/sys/printk.h>
 
+#include <zmk/ble.h>
+
 #if defined(CONFIG_BT)
 
 static const struct gpio_dt_spec blue_led =
     GPIO_DT_SPEC_GET(DT_NODELABEL(blue_led), gpios);
 
 static struct k_work_delayable bond_debug_work;
+static struct k_work_delayable bond_auto_clear_work;
+
+static bool bond_auto_clear_pending;
+static uint8_t bond_auto_clear_profile;
 
 static uint8_t blink_count;
 static uint8_t blink_state;
+
+
+/* =========================================================
+ * OTOMATİK BOND TEMİZLEME HATA KODU
+ *
+ * Şu ana kadar gerçek cihaz testinde:
+ *
+ *   SECURITY ERROR = 9
+ *
+ * ve hemen öncesinde:
+ *
+ *   Rej... pairing request to taken profile 4
+ *
+ * görülüyor.
+ *
+ * Sadece bu hata kodunda otomatik bond temizleme yapılacak.
+ *
+ * Diğer security error'larda bond'a dokunulmayacak.
+ *
+ * ========================================================= */
+
+#define BOND_AUTO_CLEAR_SECURITY_ERROR 9
 
 
 /* =========================================================
@@ -136,6 +164,88 @@ static void bond_debug_start(
 
 
 /* =========================================================
+ * OTOMATİK BOND CLEAR WORK
+ * ========================================================= */
+
+static void bond_auto_clear_work_handler(
+    struct k_work *work
+)
+{
+    ARG_UNUSED(work);
+
+
+    bond_auto_clear_pending = false;
+
+
+    int profile =
+        zmk_ble_active_profile_index();
+
+
+    /*
+     * Pairing failed ile work çalışması arasında
+     * profil değişmişse yanlış profili temizlememek için
+     * işlemi iptal ediyoruz.
+     */
+
+    if (profile < 0 || profile > 4) {
+
+        printk(
+            "Bond cleanup: otomatik temizleme iptal - gecersiz profil = %d\n",
+            profile
+        );
+
+        return;
+    }
+
+
+    if ((uint8_t)profile != bond_auto_clear_profile) {
+
+        printk(
+            "Bond cleanup: otomatik temizleme iptal - profil degisti (%d -> %d)\n",
+            bond_auto_clear_profile,
+            profile
+        );
+
+        return;
+    }
+
+
+    printk(
+        "Bond cleanup: Profil %d otomatik temizleniyor\n",
+        profile
+    );
+
+
+    /*
+     * ZMK'nin kendi bond temizleme mekanizmasını kullan.
+     *
+     * Bu işlem aktif profilin bond bilgisini temizler
+     * ve profili tekrar bos hale getirir.
+     */
+
+    int err =
+        zmk_ble_clear_bonds();
+
+
+    if (err < 0) {
+
+        printk(
+            "Bond cleanup: otomatik temizleme basarisiz (%d)\n",
+            err
+        );
+
+        return;
+    }
+
+
+    printk(
+        "Bond cleanup: Profil %d otomatik temizlendi\n",
+        profile
+    );
+}
+
+
+/* =========================================================
  * PAIRING FAILED
  * ========================================================= */
 
@@ -144,8 +254,7 @@ static void bond_cleanup_pairing_failed(
     enum bt_security_err reason
 )
 {
-    struct bt_conn_info info;
-    int err;
+    int profile;
 
 
     printk(
@@ -172,29 +281,40 @@ static void bond_cleanup_pairing_failed(
 
 
     /* =====================================================
-     * CONNECTION INFO
+     * SADECE SECURITY ERROR 9
      * ===================================================== */
 
-    err = bt_conn_get_info(
-        conn,
-        &info
-    );
-
-    if (err) {
+    if (reason != BOND_AUTO_CLEAR_SECURITY_ERROR) {
 
         printk(
-            "Bond cleanup: connection info alinamadi (%d)\n",
-            err
+            "Bond cleanup: bu hata icin otomatik temizleme yok\n"
+        );
+
+        printk(
+            "========================================\n"
         );
 
         return;
     }
 
 
-    if (info.type != BT_CONN_TYPE_LE) {
+    /* =====================================================
+     * AKTİF PROFİLİ BUL
+     * ===================================================== */
+
+    profile =
+        zmk_ble_active_profile_index();
+
+
+    if (profile < 0 || profile > 4) {
 
         printk(
-            "Bond cleanup: LE olmayan connection\n"
+            "Bond cleanup: gecersiz aktif profil = %d\n",
+            profile
+        );
+
+        printk(
+            "========================================\n"
         );
 
         return;
@@ -202,15 +322,50 @@ static void bond_cleanup_pairing_failed(
 
 
     /*
-     * ŞİMDİLİK HİÇBİR BOND SİLİNMİYOR.
-     *
-     * Bu sürüm sadece gerçek security error
-     * kodunu tespit etmek için kullanılıyor.
+     * Aynı hata arka arkaya gelirse aynı anda
+     * birden fazla temizleme işi planlamıyoruz.
      */
 
+    if (bond_auto_clear_pending) {
+
+        printk(
+            "Bond cleanup: otomatik temizleme zaten bekliyor\n"
+        );
+
+        printk(
+            "========================================\n"
+        );
+
+        return;
+    }
+
+
+    bond_auto_clear_profile =
+        (uint8_t)profile;
+
+    bond_auto_clear_pending = true;
+
+
     printk(
-        "Bond cleanup: test modu - bond silinmedi\n"
+        "Bond cleanup: Profil %d icin otomatik temizleme planlandi\n",
+        profile
     );
+
+
+    /*
+     * Pairing failed callback'i sırasında doğrudan
+     * bt bağlantısını/bond'u değiştirmiyoruz.
+     *
+     * 500 ms bekleyip work queue üzerinden temizliyoruz.
+     * Böylece mevcut failed connection'ın kapanmasına
+     * zaman tanıyoruz.
+     */
+
+    k_work_reschedule(
+        &bond_auto_clear_work,
+        K_MSEC(500)
+    );
+
 
     printk(
         "========================================\n"
@@ -243,6 +398,12 @@ static int mustafa_bond_cleanup_init(void)
     );
 
 
+    k_work_init_delayable(
+        &bond_auto_clear_work,
+        bond_auto_clear_work_handler
+    );
+
+
     if (!device_is_ready(blue_led.port)) {
 
         printk(
@@ -269,7 +430,7 @@ static int mustafa_bond_cleanup_init(void)
 
 
     printk(
-        "Bond cleanup: aktif - TEST MODU\n"
+        "Bond cleanup: aktif - OTOMATIK TEMIZLEME MODU\n"
     );
 
 
