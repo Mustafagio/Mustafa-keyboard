@@ -421,7 +421,7 @@ static ssize_t control_write(
          */
         int ret =
             bt_unpair(
-                (uint8_t)profile,
+                BT_ID_DEFAULT,
                 peer_addr
             );
 
