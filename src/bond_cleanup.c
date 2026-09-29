@@ -1,5 +1,6 @@
 #include <zephyr/bluetooth/bluetooth.h>
 #include <zephyr/bluetooth/conn.h>
+#include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
 
 static void bond_cleanup_pairing_failed(struct bt_conn *conn,
@@ -21,8 +22,9 @@ static void bond_cleanup_pairing_failed(struct bt_conn *conn,
     }
 
     err = bt_conn_get_info(conn, &info);
+
     if (err) {
-        printk("Bond cleanup: connection info alınamadı (%d)\n", err);
+        printk("Bond cleanup: connection info alinamadi (%d)\n", err);
         return;
     }
 
@@ -30,7 +32,7 @@ static void bond_cleanup_pairing_failed(struct bt_conn *conn,
         return;
     }
 
-    printk("Bond cleanup: eski/gecersiz bond algılandı\n");
+    printk("Bond cleanup: eski/gecersiz bond algilandi\n");
 
     err = bt_unpair(info.id, &info.le.dst);
 
@@ -45,14 +47,14 @@ static struct bt_conn_auth_info_cb bond_cleanup_auth_cb = {
     .pairing_failed = bond_cleanup_pairing_failed,
 };
 
-int mustafa_bond_cleanup_init(void)
+static int mustafa_bond_cleanup_init(void)
 {
     int err;
 
     err = bt_conn_auth_info_cb_register(&bond_cleanup_auth_cb);
 
     if (err) {
-        printk("Bond cleanup: callback kaydı başarısız (%d)\n", err);
+        printk("Bond cleanup: callback kaydi basarisiz (%d)\n", err);
         return err;
     }
 
@@ -60,3 +62,14 @@ int mustafa_bond_cleanup_init(void)
 
     return 0;
 }
+
+/*
+ * Bluetooth baslamadan once callback kaydedilir.
+ * bt_conn_auth_info_cb_register() icin Bluetooth'un
+ * bt_enable() ile baslatilmis olmasi gerekmez.
+ */
+SYS_INIT(
+    mustafa_bond_cleanup_init,
+    APPLICATION,
+    90
+);
