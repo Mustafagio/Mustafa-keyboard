@@ -394,51 +394,15 @@ static ssize_t control_write(
 
 
         /*
-         * ZMK'nin bu profile kaydettiği gerçek
-         * Bluetooth peer adresini al.
+         * ZMK'nin kendi Bluetooth bond temizleme mekanizmasını kullan.
+         * Bu işlem hem Bluetooth bond kaydını hem de seçili ZMK profilinin
+         * kayıtlı peer bilgisini temizler.
          */
-        bt_addr_le_t *peer_addr =
-            zmk_ble_profile_address(
-                (uint8_t)profile
-            );
-
-        if (peer_addr == NULL) {
-
-            printk(
-                "Bond clear: Profil %d adresi bulunamadi\n",
-                profile
-            );
-
-            return BT_GATT_ERR(
-                BT_ATT_ERR_UNLIKELY
-            );
-        }
-
-
-        /*
-         * Sadece bu profile ait gerçek peer adresinin
-         * bond kaydını temizle.
-         */
-        int ret =
-            bt_unpair(
-                BT_ID_DEFAULT,
-                peer_addr
-            );
-
-        if (ret < 0) {
-
-            printk(
-                "Bond clear: basarisiz (%d)\n",
-                ret
-            );
-
-            return BT_GATT_ERR(
-                BT_ATT_ERR_UNLIKELY
-            );
-        }
+        zmk_ble_clear_bonds();
 
         printk(
-            "Bond clear: Profil %d temizlendi\n",
+            "Bond clear: Profil %d temizleme tamamlandi
+",
             profile
         );
 
