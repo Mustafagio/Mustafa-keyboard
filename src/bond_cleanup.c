@@ -1,4 +1,5 @@
 #include <zephyr/kernel.h>
+#include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
 
 #include <zephyr/bluetooth/bluetooth.h>
