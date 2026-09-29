@@ -346,6 +346,72 @@ static ssize_t control_write(
         return len;
     }
 
+    /* =====================================================
+     * 0x40 = ACTIVE PROFILE BOND CLEAR
+     *
+     * Aktif Bluetooth profilinin bond kaydını siler.
+     *
+     * Profil:
+     *   0 = Profil 1
+     *   1 = Profil 2
+     *   2 = Profil 3
+     *   3 = Profil 4
+     *   4 = Profil 5
+     *
+     * ÖNEMLİ:
+     * Sadece aktif profilin Bluetooth identity kaydı
+     * temizlenir.
+     *
+     * ===================================================== */
+
+    if (data[0] == 0x40) {
+
+        int profile =
+            zmk_ble_active_profile_index();
+
+        if (profile < 0 || profile > 4) {
+
+            printk(
+                "Bond clear: gecersiz profil = %d\n",
+                profile
+            );
+
+            return BT_GATT_ERR(
+                BT_ATT_ERR_UNLIKELY
+            );
+        }
+
+        printk(
+            "Bond clear: Profil %d temizleniyor\n",
+            profile
+        );
+
+        int ret =
+            bt_unpair(
+                (uint8_t)profile,
+                NULL
+            );
+
+        if (ret < 0) {
+
+            printk(
+                "Bond clear: basarisiz (%d)\n",
+                ret
+            );
+
+            return BT_GATT_ERR(
+                BT_ATT_ERR_UNLIKELY
+            );
+        }
+
+        printk(
+            "Bond clear: Profil %d temizlendi\n",
+            profile
+        );
+
+        return len;
+    }
+
     return len;
 }
 
