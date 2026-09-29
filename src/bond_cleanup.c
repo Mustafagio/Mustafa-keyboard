@@ -219,23 +219,14 @@ static void bond_auto_clear_work_handler(
     /*
      * ZMK'nin kendi bond temizleme mekanizmasını kullan.
      *
-     * Bu işlem aktif profilin bond bilgisini temizler
-     * ve profili tekrar bos hale getirir.
+     * zmk_ble_clear_bonds() bu ZMK sürümünde
+     * void döndürür.
+     *
+     * Aktif profilin bond bilgisini temizler
+     * ve profili tekrar boş hale getirir.
      */
 
-    int err =
-        zmk_ble_clear_bonds();
-
-
-    if (err < 0) {
-
-        printk(
-            "Bond cleanup: otomatik temizleme basarisiz (%d)\n",
-            err
-        );
-
-        return;
-    }
+    zmk_ble_clear_bonds();
 
 
     printk(
@@ -255,6 +246,9 @@ static void bond_cleanup_pairing_failed(
 )
 {
     int profile;
+
+
+    ARG_UNUSED(conn);
 
 
     printk(
@@ -354,7 +348,7 @@ static void bond_cleanup_pairing_failed(
 
     /*
      * Pairing failed callback'i sırasında doğrudan
-     * bt bağlantısını/bond'u değiştirmiyoruz.
+     * bond'u değiştirmiyoruz.
      *
      * 500 ms bekleyip work queue üzerinden temizliyoruz.
      * Böylece mevcut failed connection'ın kapanmasına
