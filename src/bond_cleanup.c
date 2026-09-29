@@ -3,6 +3,8 @@
 #include <zephyr/init.h>
 #include <zephyr/sys/printk.h>
 
+#if defined(CONFIG_BT)
+
 static void bond_cleanup_pairing_failed(struct bt_conn *conn,
                                         enum bt_security_err reason)
 {
@@ -10,11 +12,11 @@ static void bond_cleanup_pairing_failed(struct bt_conn *conn,
     int err;
 
     /*
-     * İlk aşamada sadece eski/geçersiz eşleştirme anahtarını
-     * gösteren hatalarda bond temizliyoruz.
+     * Sadece eski/gecersiz eslestirme anahtarini
+     * gosteren hatalarda bond temizlenir.
      *
-     * Normal bağlantı kopmalarında veya genel AUTH_FAIL durumunda
-     * bond silinmez.
+     * Normal baglanti kopmalarinda veya genel AUTH_FAIL
+     * durumunda bond silinmez.
      */
     if (reason != BT_SECURITY_ERR_PIN_OR_KEY_MISSING &&
         reason != BT_SECURITY_ERR_KEY_REJECTED) {
@@ -34,7 +36,11 @@ static void bond_cleanup_pairing_failed(struct bt_conn *conn,
 
     printk("Bond cleanup: eski/gecersiz bond algilandi\n");
 
-    err = bt_unpair(info.id, &info.le.dst);
+    /*
+     * info.le.dst zaten bt_addr_le_t pointer'idir.
+     * Bu nedenle burada '&' kullanilmaz.
+     */
+    err = bt_unpair(info.id, info.le.dst);
 
     if (err == 0) {
         printk("Bond cleanup: bond temizlendi\n");
@@ -63,13 +69,10 @@ static int mustafa_bond_cleanup_init(void)
     return 0;
 }
 
-/*
- * Bluetooth baslamadan once callback kaydedilir.
- * bt_conn_auth_info_cb_register() icin Bluetooth'un
- * bt_enable() ile baslatilmis olmasi gerekmez.
- */
 SYS_INIT(
     mustafa_bond_cleanup_init,
     APPLICATION,
     90
 );
+
+#endif
