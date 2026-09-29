@@ -18,12 +18,17 @@ static uint8_t blink_count;
 static uint8_t blink_state;
 
 /*
- * LED teşhis kodları:
+ * LED hata teşhisi
  *
- * 1 blink = PIN_OR_KEY_MISSING
- * 2 blink = KEY_REJECTED
- * 3 blink = AUTH_FAIL
- * 4 blink = diğer güvenlik hataları
+ * 1 = PIN_OR_KEY_MISSING
+ * 2 = KEY_REJECTED
+ * 3 = AUTH_FAIL
+ *
+ * Diğer hata kodlarında:
+ * 4 = OTHER
+ *
+ * Bu sürümde OTHER durumunda gerçek
+ * enum değerini de printk ile yazdırıyoruz.
  */
 
 static void bond_debug_work_handler(struct k_work *work)
@@ -76,56 +81,85 @@ static void bond_debug_start(uint8_t count)
     );
 }
 
-static void bond_cleanup_pairing_failed(struct bt_conn *conn,
-                                        enum bt_security_err reason)
+static void bond_cleanup_pairing_failed(
+    struct bt_conn *conn,
+    enum bt_security_err reason
+)
 {
     struct bt_conn_info info;
     int err;
 
-    /*
-     * Once pairing fails, first show the actual
-     * security error through the LED.
-     */
+    printk(
+        "Bond cleanup: pairing_failed reason = %d\n",
+        reason
+    );
+
     switch (reason) {
+
     case BT_SECURITY_ERR_PIN_OR_KEY_MISSING:
-        printk("Bond cleanup: reason = PIN_OR_KEY_MISSING\n");
+
+        printk(
+            "Bond cleanup: PIN_OR_KEY_MISSING\n"
+        );
+
         bond_debug_start(1);
+
         break;
 
     case BT_SECURITY_ERR_KEY_REJECTED:
-        printk("Bond cleanup: reason = KEY_REJECTED\n");
+
+        printk(
+            "Bond cleanup: KEY_REJECTED\n"
+        );
+
         bond_debug_start(2);
+
         break;
 
     case BT_SECURITY_ERR_AUTH_FAIL:
-        printk("Bond cleanup: reason = AUTH_FAIL\n");
+
+        printk(
+            "Bond cleanup: AUTH_FAIL\n"
+        );
+
         bond_debug_start(3);
+
         break;
 
     default:
-        printk("Bond cleanup: reason = OTHER (%d)\n", reason);
+
+        printk(
+            "Bond cleanup: OTHER SECURITY ERROR = %d\n",
+            reason
+        );
+
         bond_debug_start(4);
+
         break;
     }
 
     /*
-     * İlk aşamada sadece eski/geçersiz eşleştirme
-     * anahtarını gösteren iki hata için bond siliyoruz.
+     * Şimdilik hiçbir bond'u silmiyoruz.
      *
-     * AUTH_FAIL şu anda bond silmiyor.
+     * Önce gerçek hata kodunu kesin olarak
+     * tespit edeceğiz.
      */
+
     if (reason != BT_SECURITY_ERR_PIN_OR_KEY_MISSING &&
         reason != BT_SECURITY_ERR_KEY_REJECTED) {
+
         return;
     }
 
     err = bt_conn_get_info(conn, &info);
 
     if (err) {
+
         printk(
             "Bond cleanup: connection info alinamadi (%d)\n",
             err
         );
+
         return;
     }
 
@@ -133,21 +167,20 @@ static void bond_cleanup_pairing_failed(struct bt_conn *conn,
         return;
     }
 
-    printk("Bond cleanup: eski/gecersiz bond algilandi\n");
+    printk(
+        "Bond cleanup: eski/gecersiz bond algilandi\n"
+    );
 
     /*
-     * info.le.dst zaten bt_addr_le_t pointer'idir.
+     * Bu test sürümünde gerçek silme işlemi
+     * yapılmıyor.
+     *
+     * Sadece bilgi topluyoruz.
      */
-    err = bt_unpair(info.id, info.le.dst);
 
-    if (err == 0) {
-        printk("Bond cleanup: bond temizlendi\n");
-    } else {
-        printk(
-            "Bond cleanup: bond temizlenemedi (%d)\n",
-            err
-        );
-    }
+    printk(
+        "Bond cleanup: bond temizleme testi\n"
+    );
 }
 
 static struct bt_conn_auth_info_cb bond_cleanup_auth_cb = {
@@ -164,7 +197,10 @@ static int mustafa_bond_cleanup_init(void)
     );
 
     if (!device_is_ready(blue_led.port)) {
-        printk("Bond cleanup: blue LED hazir degil\n");
+
+        printk(
+            "Bond cleanup: blue LED hazir degil\n"
+        );
     }
 
     err = bt_conn_auth_info_cb_register(
@@ -172,14 +208,18 @@ static int mustafa_bond_cleanup_init(void)
     );
 
     if (err) {
+
         printk(
             "Bond cleanup: callback kaydi basarisiz (%d)\n",
             err
         );
+
         return err;
     }
 
-    printk("Bond cleanup: aktif\n");
+    printk(
+        "Bond cleanup: aktif\n"
+    );
 
     return 0;
 }
