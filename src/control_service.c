@@ -43,6 +43,7 @@
 #define BT_UUID_MUSTAFA_CONTROL \
     BT_UUID_DECLARE_128(BT_UUID_MUSTAFA_CONTROL_VAL)
 
+
 /* =========================================================
  * AUTO-OFF API
  * ========================================================= */
@@ -52,6 +53,7 @@ extern void mustafa_auto_off_set(
 );
 
 extern uint32_t mustafa_auto_off_get(void);
+
 
 /* =========================================================
  * BLUE LED
@@ -67,6 +69,7 @@ static void notify_active_profile(
 static void notify_auto_off(
     uint8_t setting
 );
+
 
 /* =========================================================
  * CONTROL WRITE
@@ -111,6 +114,7 @@ static ssize_t control_write(
         );
     }
 
+
     /* =====================================================
      * 0x01 = LED ON
      * ===================================================== */
@@ -132,6 +136,7 @@ static ssize_t control_write(
         return len;
     }
 
+
     /* =====================================================
      * 0x02 = LED OFF
      * ===================================================== */
@@ -152,6 +157,7 @@ static ssize_t control_write(
 
         return len;
     }
+
 
     /* =====================================================
      * 0x10 = BLUETOOTH PROFILE SELECT
@@ -190,6 +196,7 @@ static ssize_t control_write(
         return len;
     }
 
+
     /* =====================================================
      * 0x21 = ACTIVE PROFILE REQUEST
      * ===================================================== */
@@ -211,6 +218,7 @@ static ssize_t control_write(
 
         return len;
     }
+
 
     /* =====================================================
      * 0x31 = AUTO-OFF CURRENT SETTING REQUEST
@@ -277,6 +285,7 @@ static ssize_t control_write(
 
         return len;
     }
+
 
     /* =====================================================
      * 0x30 = AUTO-OFF
@@ -346,10 +355,11 @@ static ssize_t control_write(
         return len;
     }
 
+
     /* =====================================================
      * 0x40 = ACTIVE PROFILE BOND CLEAR
      *
-     * Aktif Bluetooth profilinin bond kaydını siler.
+     * Aktif Bluetooth profilinin kayıtlı peer bond kaydını siler.
      *
      * Profil:
      *   0 = Profil 1
@@ -357,10 +367,6 @@ static ssize_t control_write(
      *   2 = Profil 3
      *   3 = Profil 4
      *   4 = Profil 5
-     *
-     * ÖNEMLİ:
-     * Sadece aktif profilin Bluetooth identity kaydı
-     * temizlenir.
      *
      * ===================================================== */
 
@@ -386,10 +392,37 @@ static ssize_t control_write(
             profile
         );
 
+
+        /*
+         * ZMK'nin bu profile kaydettiği gerçek
+         * Bluetooth peer adresini al.
+         */
+        bt_addr_le_t *peer_addr =
+            zmk_ble_profile_address(
+                (uint8_t)profile
+            );
+
+        if (peer_addr == NULL) {
+
+            printk(
+                "Bond clear: Profil %d adresi bulunamadi\n",
+                profile
+            );
+
+            return BT_GATT_ERR(
+                BT_ATT_ERR_UNLIKELY
+            );
+        }
+
+
+        /*
+         * Sadece bu profile ait gerçek peer adresinin
+         * bond kaydını temizle.
+         */
         int ret =
             bt_unpair(
                 (uint8_t)profile,
-                NULL
+                peer_addr
             );
 
         if (ret < 0) {
@@ -412,8 +445,10 @@ static ssize_t control_write(
         return len;
     }
 
+
     return len;
 }
+
 
 /* =========================================================
  * GATT SERVICE
@@ -448,6 +483,7 @@ BT_GATT_SERVICE_DEFINE(
     )
 );
 
+
 /* =========================================================
  * ACTIVE PROFILE NOTIFY
  * ========================================================= */
@@ -478,6 +514,7 @@ static void notify_active_profile(
         );
     }
 }
+
 
 /* =========================================================
  * AUTO-OFF NOTIFY
@@ -510,6 +547,7 @@ static void notify_auto_off(
     }
 }
 
+
 /* =========================================================
  * ACTIVE PROFILE EVENT
  * ========================================================= */
@@ -536,6 +574,7 @@ static int active_profile_listener(
     return 0;
 }
 
+
 ZMK_LISTENER(
     active_profile_listener,
     active_profile_listener
@@ -545,6 +584,7 @@ ZMK_SUBSCRIPTION(
     active_profile_listener,
     zmk_ble_active_profile_changed
 );
+
 
 /* =========================================================
  * INIT
@@ -568,6 +608,7 @@ static int mustafa_control_init(void)
 
     return 0;
 }
+
 
 SYS_INIT(
     mustafa_control_init,
